@@ -23,8 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 
-# Convex generated
-convex/_generated
+# Convex generated (committed intentionally for CI/CD — regenerate with `bunx convex dev`)
+# convex/_generated
 
 # Convex local backend data
 convex_local_backend.sqlite3
