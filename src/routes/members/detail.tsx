@@ -177,10 +177,10 @@ export default function MemberDetailPage() {
 
   function openEditMember() {
     setMemberForm({
-      firstName: member.firstName,
-      lastName: member.lastName,
-      memberId: member.memberId,
-      type: member.type,
+      firstName: member!.firstName,
+      lastName: member!.lastName,
+      memberId: member!.memberId,
+      type: member!.type,
     })
     setEditMemberOpen(true)
   }

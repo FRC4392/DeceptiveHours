@@ -208,10 +208,8 @@ export default function MentorLayout() {
         {/* Mobile header */}
         <header className="flex items-center gap-3 border-b bg-background px-4 py-3 lg:hidden">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Menu className="h-5 w-5" />
-              </Button>
+            <SheetTrigger render={<Button variant="ghost" size="icon" />}>
+              <Menu className="h-5 w-5" />
             </SheetTrigger>
             <SheetContent side="left" className="w-60 p-0">
               <SidebarContent onNavigate={() => setMobileOpen(false)} />

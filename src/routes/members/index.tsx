@@ -223,7 +223,7 @@ export default function MembersPage() {
               <Label htmlFor="type">Member Type</Label>
               <Select
                 value={form.type}
-                onValueChange={(v) => updateForm("type", v)}
+                onValueChange={(v) => v && updateForm("type", v)}
               >
                 <SelectTrigger id="type">
                   <SelectValue />
