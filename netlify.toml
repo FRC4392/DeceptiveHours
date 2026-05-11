@@ -5,6 +5,9 @@
 [build.environment]
   NODE_VERSION = "20"
 
+[context.deploy-preview]
+  command = "bun run build"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
