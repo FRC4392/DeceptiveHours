@@ -52,4 +52,4 @@ After setup, wire the framework baseline only:
 - Do not add product-specific features until separate product instructions are provided.
 
 
-Few notes.  Make the convex on my personal team. And then when you are done i need a global run command i can use in codex.  Needs to install everything and run. Auth should be used using Convex. There will be AI skills for this.
+Few notes. And then when you are done i need a global run command i can use.  Needs to install everything and run. Auth should be used using Convex. There will be AI skills for this.
