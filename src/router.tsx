@@ -6,6 +6,7 @@ import LoginPage from "@/routes/login"
 import DashboardPage from "@/routes/dashboard"
 import MembersPage from "@/routes/members/index"
 import MemberDetailPage from "@/routes/members/detail"
+import UsersPage from "@/routes/users/index"
 
 export const router = createBrowserRouter([
   {
@@ -33,6 +34,10 @@ export const router = createBrowserRouter([
           {
             path: "/members/:memberId",
             Component: MemberDetailPage,
+          },
+          {
+            path: "/users",
+            Component: UsersPage,
           },
         ],
       },

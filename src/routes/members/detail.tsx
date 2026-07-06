@@ -209,7 +209,7 @@ export default function MemberDetailPage() {
           </Button>
         </Link>
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">
+          <h1 className="font-heading text-2xl font-bold italic uppercase tracking-tight">
             {member.firstName} {member.lastName}
           </h1>
           <p className="text-sm text-muted-foreground">Member profile and sessions</p>
@@ -275,7 +275,7 @@ export default function MemberDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="text-center">
-              <p className="text-4xl font-bold tabular-nums">{formatTotalHours(totalYearMs)}</p>
+              <p className="font-heading text-4xl font-extrabold italic tabular-nums">{formatTotalHours(totalYearMs)}</p>
               <p className="text-sm text-muted-foreground">total hours</p>
             </div>
             <div className="text-center text-sm text-muted-foreground">

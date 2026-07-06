@@ -1,14 +1,29 @@
 import { mutation, query } from "./_generated/server"
+import type { QueryCtx, MutationCtx } from "./_generated/server"
+import type { Id } from "./_generated/dataModel"
 import { v } from "convex/values"
-import { auth } from "./auth"
+import { requireMentor } from "./authz"
 
 function yearStart(): number {
   const d = new Date()
   return new Date(d.getFullYear(), 0, 1).getTime()
 }
 
+const clockSessionDoc = v.object({
+  _id: v.id("clockSessions"),
+  _creationTime: v.number(),
+  teamMemberId: v.id("teamMembers"),
+  clockIn: v.number(),
+  clockOut: v.optional(v.number()),
+})
+
+// Public (kiosk): completed hours this year + the open session, if any.
 export const getMemberStatus = query({
   args: { teamMemberId: v.id("teamMembers") },
+  returns: v.object({
+    completedMs: v.number(),
+    currentSession: v.union(clockSessionDoc, v.null()),
+  }),
   handler: async (ctx, { teamMemberId }) => {
     const sessions = await ctx.db
       .query("clockSessions")
@@ -21,13 +36,15 @@ export const getMemberStatus = query({
       return acc
     }, 0)
 
-    const currentSession = sessions.find((s) => !s.clockOut) ?? null
+    const currentSession = sessions.find((s) => s.clockOut === undefined) ?? null
     return { completedMs, currentSession }
   },
 })
 
+// Public (kiosk): full session history for a member, newest first.
 export const getForMember = query({
   args: { teamMemberId: v.id("teamMembers") },
+  returns: v.array(clockSessionDoc),
   handler: async (ctx, { teamMemberId }) => {
     return ctx.db
       .query("clockSessions")
@@ -37,63 +54,78 @@ export const getForMember = query({
   },
 })
 
+// Returns the single open (not-yet-clocked-out) session for a member, or null.
+// Scoped by the by_teamMemberId index; a member has at most a handful of rows.
+async function openSessionFor(
+  ctx: QueryCtx | MutationCtx,
+  teamMemberId: Id<"teamMembers">,
+) {
+  const sessions = await ctx.db
+    .query("clockSessions")
+    .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", teamMemberId))
+    .collect()
+  return sessions.find((s) => s.clockOut === undefined) ?? null
+}
+
+// Public (kiosk): open a session if none is open.
 export const clockIn = mutation({
   args: { teamMemberId: v.id("teamMembers") },
+  returns: v.id("clockSessions"),
   handler: async (ctx, { teamMemberId }) => {
-    const existing = await ctx.db
-      .query("clockSessions")
-      .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", teamMemberId))
-      .filter((q) => q.eq(q.field("clockOut"), undefined))
-      .unique()
+    const existing = await openSessionFor(ctx, teamMemberId)
     if (existing) throw new Error("Already clocked in")
     return ctx.db.insert("clockSessions", { teamMemberId, clockIn: Date.now() })
   },
 })
 
+// Public (kiosk): close the open session.
 export const clockOut = mutation({
   args: { teamMemberId: v.id("teamMembers") },
+  returns: v.null(),
   handler: async (ctx, { teamMemberId }) => {
-    const session = await ctx.db
-      .query("clockSessions")
-      .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", teamMemberId))
-      .filter((q) => q.eq(q.field("clockOut"), undefined))
-      .unique()
+    const session = await openSessionFor(ctx, teamMemberId)
     if (!session) throw new Error("Not clocked in")
     await ctx.db.patch(session._id, { clockOut: Date.now() })
+    return null
   },
 })
 
+// Mentor-only: manual session entry.
 export const addSession = mutation({
   args: {
     teamMemberId: v.id("teamMembers"),
     clockIn: v.number(),
     clockOut: v.optional(v.number()),
   },
+  returns: v.id("clockSessions"),
   handler: async (ctx, args) => {
-    const userId = await auth.getUserId(ctx)
-    if (!userId) throw new Error("Unauthorized")
+    await requireMentor(ctx)
     return ctx.db.insert("clockSessions", args)
   },
 })
 
+// Mentor-only: edit a session.
 export const updateSession = mutation({
   args: {
     id: v.id("clockSessions"),
     clockIn: v.number(),
     clockOut: v.optional(v.number()),
   },
+  returns: v.null(),
   handler: async (ctx, { id, clockIn, clockOut }) => {
-    const userId = await auth.getUserId(ctx)
-    if (!userId) throw new Error("Unauthorized")
+    await requireMentor(ctx)
     await ctx.db.patch(id, { clockIn, clockOut })
+    return null
   },
 })
 
+// Mentor-only: delete a session.
 export const deleteSession = mutation({
   args: { id: v.id("clockSessions") },
+  returns: v.null(),
   handler: async (ctx, { id }) => {
-    const userId = await auth.getUserId(ctx)
-    if (!userId) throw new Error("Unauthorized")
+    await requireMentor(ctx)
     await ctx.db.delete(id)
+    return null
   },
 })

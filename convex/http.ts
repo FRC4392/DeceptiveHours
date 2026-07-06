@@ -1,8 +1,11 @@
 import { httpRouter } from "convex/server"
-import { auth } from "./auth"
+import { authKit } from "./auth"
 
 const http = httpRouter()
 
-auth.addHttpRoutes(http)
+// Registers:
+//   POST /workos/webhook  -> dispatches user.created/updated/deleted to authKitEvent
+//   POST /workos/action   -> WorkOS actions (not used here)
+authKit.registerRoutes(http)
 
 export default http
