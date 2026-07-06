@@ -1,17 +1,17 @@
 import { defineSchema, defineTable } from "convex/server"
-import { authTables } from "@convex-dev/auth/server"
 import { v } from "convex/values"
 
 export default defineSchema({
-  ...authTables,
-
   teamMembers: defineTable({
+    workosUserId: v.string(),
+    email: v.string(),
     firstName: v.string(),
     lastName: v.string(),
     memberId: v.string(),
     type: v.union(v.literal("student"), v.literal("mentor")),
   })
-    .index("by_memberId", ["memberId"]),
+    .index("by_memberId", ["memberId"])
+    .index("by_workosUserId", ["workosUserId"]),
 
   clockSessions: defineTable({
     teamMemberId: v.id("teamMembers"),

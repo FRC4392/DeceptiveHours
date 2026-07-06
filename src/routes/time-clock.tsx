@@ -236,16 +236,16 @@ function MemberCard({
       <CardContent className="space-y-6 pt-6">
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg bg-muted p-4 text-center">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="mb-1 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground">
               Year Hours
             </p>
-            <p className="text-3xl font-bold tabular-nums text-foreground">
+            <p className="font-heading text-3xl font-extrabold italic tabular-nums text-foreground">
               {formatTotalHours(totalMs)}
             </p>
             <p className="text-xs text-muted-foreground">hrs</p>
           </div>
           <div className="rounded-lg bg-muted p-4 text-center">
-            <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <p className="mb-1 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground">
               {currentClockIn ? "Session" : "Status"}
             </p>
             {currentClockIn ? (

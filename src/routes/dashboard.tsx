@@ -29,7 +29,7 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Dashboard</h1>
+        <h1 className="font-heading text-2xl font-bold italic uppercase tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">Overview of team hours and attendance</p>
       </div>
 
@@ -37,13 +37,13 @@ export default function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="not-italic normal-case font-mono text-xs font-medium tracking-wider text-muted-foreground">
               Currently Clocked In
             </CardTitle>
             <UserCheck className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{data.currentlySignedIn.length}</p>
+            <p className="font-heading text-3xl font-extrabold italic">{data.currentlySignedIn.length}</p>
             <p className="text-xs text-muted-foreground">
               of {data.members.length} members
             </p>
@@ -52,13 +52,13 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="not-italic normal-case font-mono text-xs font-medium tracking-wider text-muted-foreground">
               Total Team Hours (YTD)
             </CardTitle>
             <Clock className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">
+            <p className="font-heading text-3xl font-extrabold italic">
               {formatTotalHours(data.totalCompletedMs)}
             </p>
             <p className="text-xs text-muted-foreground">completed hours this year</p>
@@ -67,13 +67,13 @@ export default function DashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+            <CardTitle className="not-italic normal-case font-mono text-xs font-medium tracking-wider text-muted-foreground">
               Team Members
             </CardTitle>
             <Users className="h-4 w-4 text-primary" />
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{data.members.length}</p>
+            <p className="font-heading text-3xl font-extrabold italic">{data.members.length}</p>
             <p className="text-xs text-muted-foreground">registered members</p>
           </CardContent>
         </Card>
@@ -121,8 +121,8 @@ export default function DashboardPage() {
                 <TableRow>
                   <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
                     No members yet.{" "}
-                    <Link to="/members" className="text-primary underline-offset-4 hover:underline">
-                      Add your first member →
+                    <Link to="/users" className="text-primary underline-offset-4 hover:underline">
+                      Invite your first user →
                     </Link>
                   </TableCell>
                 </TableRow>

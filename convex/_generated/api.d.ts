@@ -9,10 +9,13 @@
  */
 
 import type * as auth from "../auth.js";
+import type * as authz from "../authz.js";
 import type * as clockSessions from "../clockSessions.js";
 import type * as dashboard from "../dashboard.js";
 import type * as http from "../http.js";
 import type * as teamMembers from "../teamMembers.js";
+import type * as users from "../users.js";
+import type * as workos from "../workos.js";
 
 import type {
   ApiFromModules,
@@ -22,10 +25,13 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   auth: typeof auth;
+  authz: typeof authz;
   clockSessions: typeof clockSessions;
   dashboard: typeof dashboard;
   http: typeof http;
   teamMembers: typeof teamMembers;
+  users: typeof users;
+  workos: typeof workos;
 }>;
 
 /**
@@ -54,4 +60,6 @@ export declare const internal: FilterApi<
   FunctionReference<any, "internal">
 >;
 
-export declare const components: {};
+export declare const components: {
+  workOSAuthKit: import("@convex-dev/workos-authkit/_generated/component.js").ComponentApi<"workOSAuthKit">;
+};
