@@ -10,7 +10,7 @@ import {
 } from "./studentInfo"
 
 const teamMemberFields = {
-  workosUserId: v.string(),
+  clerkUserId: v.string(),
   email: v.string(),
   firstName: v.string(),
   lastName: v.string(),
@@ -29,8 +29,8 @@ const teamMemberDoc = v.object({
 })
 
 // Shape returned by the two public (unauthenticated) lookups below.
-// Deliberately excludes `email` and `workosUserId` — those queries are
-// reachable by anyone who can guess a memberId, so PII and internal WorkOS
+// Deliberately excludes `email` and `clerkUserId` — those queries are
+// reachable by anyone who can guess a memberId, so PII and internal Clerk
 // identifiers must not ride along in the response even though the current
 // UI doesn't render them.
 const publicMemberDoc = v.object({
@@ -71,7 +71,17 @@ function toPublicMemberDoc(member: Doc<"teamMembers">) {
 
 function toTeamMemberDoc(member: Doc<"teamMembers">) {
   return {
-    ...member,
+    _id: member._id,
+    _creationTime: member._creationTime,
+    clerkUserId: member.clerkUserId ?? "",
+    email: member.email,
+    firstName: member.firstName,
+    lastName: member.lastName,
+    memberId: member.memberId,
+    type: member.type,
+    studentStartYear: member.studentStartYear,
+    studentGrade: member.studentGrade,
+    studentGradeAsOfSchoolYear: member.studentGradeAsOfSchoolYear,
     displayGrade: computeDisplayGrade(member),
   }
 }
@@ -127,7 +137,7 @@ export const list = query({
 })
 
 // Mentor-only local correction of a synced roster row. The roster of record is
-// WorkOS (via webhooks); this exists for on-the-spot fixes. `workosUserId` is
+// Clerk (via webhooks); this exists for on-the-spot fixes. `clerkUserId` is
 // immutable and never edited here.
 export const update = mutation({
   args: {
@@ -185,8 +195,8 @@ export const update = mutation({
   },
 })
 
-// Mentor-only local removal. Note: this does not delete the user in WorkOS; the
-// next webhook sync may re-create the row. Use `api.workos.removeUser` to remove
+// Mentor-only local removal. Note: this does not delete the user in Clerk; the
+// next webhook sync may re-create the row. Use `api.clerk.removeUser` to remove
 // the user upstream. Cascade-deletes the member's clockSessions.
 export const remove = mutation({
   args: { id: v.id("teamMembers") },

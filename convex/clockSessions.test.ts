@@ -11,7 +11,7 @@ type TestBackend = ReturnType<typeof convexTest>
 async function seedRoster(t: Pick<TestBackend, "run">) {
   return t.run(async (ctx) => {
     const mentorId = await ctx.db.insert("teamMembers", {
-      workosUserId: "mentor-user",
+      clerkUserId: "mentor-user",
       email: "mentor@example.com",
       firstName: "Mira",
       lastName: "Mentor",
@@ -19,7 +19,7 @@ async function seedRoster(t: Pick<TestBackend, "run">) {
       type: "mentor",
     })
     const studentId = await ctx.db.insert("teamMembers", {
-      workosUserId: "student-user",
+      clerkUserId: "student-user",
       email: "student@example.com",
       firstName: "Sam",
       lastName: "Student",
@@ -85,7 +85,7 @@ describe("clock sessions", () => {
     const { studentId } = await seedRoster(t)
     const missingMemberId = await t.run(async (ctx) => {
       const id = await ctx.db.insert("teamMembers", {
-        workosUserId: "missing-user",
+        clerkUserId: "missing-user",
         email: "missing@example.com",
         firstName: "Missing",
         lastName: "Member",

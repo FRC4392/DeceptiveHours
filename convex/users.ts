@@ -5,7 +5,7 @@ import { getCurrentMember, requireMentor } from "./authz"
 /**
  * The current user's roster identity, safe to call while signed out.
  *
- * Returns `null` when there is no authenticated WorkOS identity, or when the
+ * Returns `null` when there is no authenticated Clerk identity, or when the
  * identity exists but has not yet been synced into `teamMembers` by the webhook.
  * `role` is `null` in the (transient) synced-but-unknown case. The client uses
  * this to decide routing, so it MUST NOT throw.
@@ -36,13 +36,14 @@ export const me = query({
 /**
  * Internal mentor gate for use from Node actions (which have no `ctx.db`).
  * Throws unless the caller is an authenticated mentor. Returns the mentor's
- * workosUserId so callers can, e.g., avoid self-removal.
+ * clerkUserId so callers can, e.g., avoid self-removal.
  */
 export const assertMentor = internalQuery({
   args: {},
-  returns: v.object({ workosUserId: v.string() }),
+  returns: v.object({ clerkUserId: v.string() }),
   handler: async (ctx) => {
     const member = await requireMentor(ctx)
-    return { workosUserId: member.workosUserId }
+    if (!member.clerkUserId) throw new Error("Unauthorized")
+    return { clerkUserId: member.clerkUserId }
   },
 })

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { NavLink, Outlet } from "react-router"
-import { useAuth } from "@workos-inc/authkit-react"
+import { SignOutButton } from "@clerk/react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
@@ -39,12 +39,6 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
-  const { signOut } = useAuth()
-
-  function handleSignOut() {
-    signOut({ returnTo: `${window.location.origin}/login` })
-  }
-
   return (
     <div className="flex h-full flex-col bg-gradient-to-b from-brand-deep to-brand-navy text-white">
       <div className="flex items-center justify-center px-4 py-3">
@@ -56,14 +50,15 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       </div>
       <Separator className="bg-white/10" />
       <div className="space-y-1 p-3">
-        <Button
-          variant="ghost"
-          className="w-full justify-start gap-3 text-white/70 hover:bg-white/10 hover:text-white"
-          onClick={handleSignOut}
-        >
-          <LogOut className="h-4 w-4" />
-          Sign Out
-        </Button>
+        <SignOutButton redirectUrl="/login">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 text-white/70 hover:bg-white/10 hover:text-white"
+          >
+            <LogOut className="h-4 w-4" />
+            Sign Out
+          </Button>
+        </SignOutButton>
         <div className="px-2 pt-2">
           <NavLink
             to="/clock"

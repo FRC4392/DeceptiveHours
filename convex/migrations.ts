@@ -38,3 +38,38 @@ export const backfillClockSessionStatus = mutation({
     }
   },
 })
+
+export const clearWorkosEraRoster = mutation({
+  args: {
+    confirmation: v.string(),
+  },
+  returns: v.object({
+    deletedClockSessions: v.number(),
+    deletedTeamMembers: v.number(),
+  }),
+  handler: async (ctx, { confirmation }) => {
+    if (process.env.ENABLE_DESTRUCTIVE_MIGRATIONS !== "true") {
+      throw new Error("ENABLE_DESTRUCTIVE_MIGRATIONS must be true")
+    }
+    if (confirmation !== "DELETE_WORKOS_ROSTER") {
+      throw new Error("Invalid confirmation")
+    }
+
+    const sessions = await ctx.db.query("clockSessions").take(500)
+    if (sessions.length === 500) {
+      throw new Error("Too many clock sessions to clear in one run")
+    }
+    const members = await ctx.db.query("teamMembers").take(500)
+    if (members.length === 500) {
+      throw new Error("Too many team members to clear in one run")
+    }
+
+    await Promise.all(sessions.map((session) => ctx.db.delete(session._id)))
+    await Promise.all(members.map((member) => ctx.db.delete(member._id)))
+
+    return {
+      deletedClockSessions: sessions.length,
+      deletedTeamMembers: members.length,
+    }
+  },
+})

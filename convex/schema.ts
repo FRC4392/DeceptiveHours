@@ -3,7 +3,8 @@ import { v } from "convex/values"
 
 export default defineSchema({
   teamMembers: defineTable({
-    workosUserId: v.string(),
+    clerkUserId: v.optional(v.string()),
+    workosUserId: v.optional(v.string()),
     email: v.string(),
     firstName: v.string(),
     lastName: v.string(),
@@ -25,7 +26,7 @@ export default defineSchema({
     studentGradeAsOfSchoolYear: v.optional(v.number()),
   })
     .index("by_memberId", ["memberId"])
-    .index("by_workosUserId", ["workosUserId"]),
+    .index("by_clerkUserId", ["clerkUserId"]),
 
   appSettings: defineTable({
     key: v.string(),
