@@ -107,7 +107,12 @@ Connect the repo in the [Netlify dashboard](https://app.netlify.com). Add the fo
 | Variable | Value |
 |---|---|
 | `VITE_CONVEX_URL` | Your Convex production URL (e.g. `https://xxxx.convex.cloud`) |
+| `VITE_WORKOS_CLIENT_ID` | Your production WorkOS client ID |
+| `VITE_WORKOS_REDIRECT_URI` | Your production frontend redirect URI |
 | `CONVEX_DEPLOY_KEY` | Found in Convex dashboard → Settings → Deploy key |
+
+This app keeps AuthKit's client-side `devMode` enabled in production so the
+free WorkOS setup works without a paid custom Authentication API domain.
 
 The `netlify.toml` at the repo root handles the build command, publish directory, and SPA redirects automatically.
 
