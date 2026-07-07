@@ -1,16 +1,15 @@
 import { useState } from "react"
-import { Navigate, NavLink, Outlet } from "react-router"
-import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react"
+import { NavLink, Outlet } from "react-router"
 import { useAuth } from "@workos-inc/authkit-react"
-import { api } from "@convex/_generated/api"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { LayoutDashboard, LogOut, Menu, UserCog, Users } from "lucide-react"
 import logo from "@/assets/logo.png"
+import { MentorGate } from "./mentor-gate"
 
 const navItems = [
-  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/members", label: "Team Members", icon: Users },
   { to: "/users", label: "Manage Users", icon: UserCog },
 ]
@@ -67,7 +66,7 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
         </Button>
         <div className="px-2 pt-2">
           <NavLink
-            to="/"
+            to="/clock"
             className="text-xs text-white/50 hover:text-white"
           >
             ← Time Clock Kiosk
@@ -78,22 +77,8 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   )
 }
 
-function Spinner() {
-  return (
-    <div className="flex min-h-svh items-center justify-center">
-      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-    </div>
-  )
-}
-
-// Rendered once Convex confirms the visitor is authenticated. Role-gating
-// happens here as a plain conditional render, not an imperative redirect.
 function MentorShell() {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const me = useQuery(api.users.me)
-
-  if (me === undefined) return <Spinner />
-  if (me?.role !== "mentor") return <Navigate to="/" replace />
 
   return (
     <div className="flex min-h-svh">
@@ -127,22 +112,10 @@ function MentorShell() {
   )
 }
 
-// Auth state comes purely from Convex's own confirmation (Authenticated /
-// Unauthenticated / AuthLoading), not an imperative navigate() reacting to
-// WorkOS's raw client state — the two resolve on different timelines, and
-// mixing them caused a fast redirect ping-pong with the login page.
 export default function MentorLayout() {
   return (
-    <>
-      <AuthLoading>
-        <Spinner />
-      </AuthLoading>
-      <Unauthenticated>
-        <Navigate to="/login" replace />
-      </Unauthenticated>
-      <Authenticated>
-        <MentorShell />
-      </Authenticated>
-    </>
+    <MentorGate>
+      <MentorShell />
+    </MentorGate>
   )
 }

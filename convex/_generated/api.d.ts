@@ -13,6 +13,7 @@ import type * as authz from "../authz.js";
 import type * as clockSessions from "../clockSessions.js";
 import type * as dashboard from "../dashboard.js";
 import type * as http from "../http.js";
+import type * as migrations from "../migrations.js";
 import type * as teamMembers from "../teamMembers.js";
 import type * as users from "../users.js";
 import type * as workos from "../workos.js";
@@ -29,6 +30,7 @@ declare const fullApi: ApiFromModules<{
   clockSessions: typeof clockSessions;
   dashboard: typeof dashboard;
   http: typeof http;
+  migrations: typeof migrations;
   teamMembers: typeof teamMembers;
   users: typeof users;
   workos: typeof workos;

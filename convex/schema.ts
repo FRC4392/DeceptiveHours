@@ -17,7 +17,12 @@ export default defineSchema({
     teamMemberId: v.id("teamMembers"),
     clockIn: v.number(),
     clockOut: v.optional(v.number()),
+    // Optional during the widen-migrate-narrow rollout. New writes populate it;
+    // old rows are interpreted from clockOut until backfilled.
+    status: v.optional(v.union(v.literal("open"), v.literal("closed"))),
   })
     .index("by_teamMemberId", ["teamMemberId"])
-    .index("by_teamMemberId_clockIn", ["teamMemberId", "clockIn"]),
+    .index("by_teamMemberId_clockIn", ["teamMemberId", "clockIn"])
+    .index("by_teamMemberId_and_status", ["teamMemberId", "status"])
+    .index("by_status", ["status"]),
 })

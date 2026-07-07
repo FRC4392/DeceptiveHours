@@ -2,7 +2,7 @@
 
 **Deceivers Robotics Team 4392**
 
-DeceptiveHours is the team's hour tracking system. It has two parts: a public **Time Clock Kiosk** that any team member uses to clock in and out, and a protected **Mentor Dashboard** for managing the roster and reviewing hours.
+DeceptiveHours is the team's hour tracking system. It has two parts: a mentor-unlocked **Time Clock Kiosk** that team members use to clock in and out, and a protected **Mentor Dashboard** for managing the roster and reviewing hours.
 
 ---
 
@@ -13,13 +13,13 @@ DeceptiveHours is the team's hour tracking system. It has two parts: a public **
 3. [Dashboard](#3-dashboard)
 4. [Team Members](#4-team-members)
 5. [Member Detail](#5-member-detail)
-6. [Adding Mentor Accounts](#6-adding-mentor-accounts)
+6. [Managing Users](#6-managing-users)
 
 ---
 
 ## 1. Time Clock Kiosk
 
-The kiosk is the home screen (`/`) and is always public — no login required. It is designed to run on a shared screen such as a Raspberry Pi display at the build space entrance.
+The kiosk is at `/clock`. A mentor must sign in on the kiosk browser first, then the shared screen can stay open for team members to clock in and out.
 
 ### Clocking In or Out
 
@@ -39,7 +39,7 @@ If your mentor has given you a printed QR code:
 3. Hold your QR code up to the camera — it will scan automatically.
 4. Your member card will appear as if you had typed your ID manually.
 
-> **Note:** QR scanning requires a device with a camera and a browser that supports the BarcodeDetector API (Chrome and Edge on desktop/Android). It is not supported on Safari.
+> **Note:** QR scanning requires a device with a camera and browser camera permissions. The scanner uses `jsQR`, so typing the Member ID manually remains the fallback if camera access is unavailable.
 
 ### What the Kiosk Shows
 
@@ -58,19 +58,19 @@ If your Member ID is not found, an error message will appear and the kiosk will 
 
 Mentors access the protected dashboard at `/login`.
 
-1. Enter your **email address** and **password**.
-2. Click **Sign In**.
-3. You will be redirected to the Dashboard.
+1. Click **Sign in with WorkOS**.
+2. You'll be taken to a WorkOS sign-in page — enter your credentials there.
+3. You'll be redirected back to the Dashboard automatically.
 
-> If you have forgotten your password, contact another mentor who can create a new account for you, or reach out to whoever manages the system.
+> Passwords and account recovery are managed by WorkOS, not by this app. If you're stuck signing in, use the "forgot password" option on the WorkOS sign-in page, or reach out to whoever manages the team's WorkOS organization.
 
-There is no public sign-up — accounts are created by existing mentors only (see [Section 6](#6-adding-mentor-accounts)).
+There is no public sign-up — accounts are created by existing mentors only (see [Section 6](#6-managing-users)).
 
 ---
 
 ## 3. Dashboard
 
-The Dashboard (`/dashboard`) gives a live overview of team activity.
+The Dashboard (`/`) gives a live overview of team activity.
 
 ### Summary Cards
 
@@ -97,7 +97,7 @@ A table lists every team member sorted by total hours (highest first). Each row 
 
 ## 4. Team Members
 
-The Team Members page (`/members`) is where you manage the roster.
+The Team Members page (`/members`) is where you view the roster. New people are invited from **Manage Users** (`/users`) and sync into the roster after accepting their WorkOS invitation.
 
 ### Viewing Members
 
@@ -105,13 +105,12 @@ The page shows a table of all members with their name, type, and Member ID.
 
 ### Adding a Member
 
-1. Click **Add Member** in the top-right corner.
-2. Fill in:
-   - **First Name** and **Last Name**
-   - **Member Type** — Student or Mentor
-3. Click **Add Member**.
+1. Open **Manage Users** (`/users`).
+2. Click **Invite User**.
+3. Enter the person's email address and choose **Student** or **Mentor**.
+4. Send the invitation.
 
-A Member ID is generated automatically (a 10-digit number beginning with `4392`). The member can find their assigned ID on their detail page, where a QR code can also be generated for printing.
+A Member ID is generated automatically (a 10-digit number beginning with `4392`) after the invited user accepts and syncs into the roster. The member can find their assigned ID on their detail page, where a QR code can also be generated for printing.
 
 ### Removing a Member
 
@@ -163,17 +162,19 @@ Click the **trash icon** on any row and confirm. Sessions that are still in prog
 
 ---
 
-## 6. Adding Mentor Accounts
+## 6. Managing Users
 
-Only a currently signed-in mentor can create new accounts — there is no public sign-up.
+Only a currently signed-in mentor can invite new accounts — there is no public sign-up.
 
 1. Sign in to the mentor dashboard.
-2. In the left sidebar, click **Add Mentor Account**.
-3. Enter the new mentor's **email address** and a **temporary password**.
-4. Click **Create Account**.
-5. Share the credentials with the new mentor and ask them to sign in.
+2. In the left sidebar, click **Manage Users**.
+3. Click **Invite User** in the top-right corner.
+4. Enter the person's **email address** and choose their **Role** (Student or Mentor).
+5. Click **Invite User** to send the invitation.
 
-> Passwords cannot be changed from within the app. If a mentor needs a new password, delete their account and create a new one with a new password, or have your system administrator update it directly via the Convex dashboard.
+The invited person receives an email from WorkOS to accept the invitation and set their own password. Once accepted, they appear automatically in the Team Members roster with the role you selected — no manual account creation step is needed.
+
+> Passwords are managed entirely by WorkOS, not by this app. If someone needs a password reset, they can use the "forgot password" option on the WorkOS sign-in page — mentors can't reset passwords on a user's behalf from within DeceptiveHours.
 
 ---
 
@@ -186,7 +187,7 @@ Ask a mentor to check that your name appears in the Team Members list and that y
 Ask a mentor to open your Member Detail page, find the session with the missing clock-out time, and edit it to add the correct time.
 
 **The QR scanner isn't working.**  
-Make sure you are using Chrome or Edge (not Safari), and that you have granted camera permission to the site. If the browser doesn't support QR scanning, you can always type your Member ID manually instead.
+Make sure the kiosk device has a camera and that you have granted camera permission to the site. You can always type your Member ID manually instead.
 
 **The kiosk shows the wrong hours.**  
 Hours shown are year-to-date (since January 1st of the current year) and include only completed sessions. A currently running session is shown separately as a live timer and is not counted in your total until you clock out.

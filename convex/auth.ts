@@ -96,7 +96,10 @@ async function deleteMember(ctx: MutationCtx, workosUserId: string): Promise<voi
   const sessions = await ctx.db
     .query("clockSessions")
     .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", member._id))
-    .collect()
+    .take(500)
+  if (sessions.length === 500) {
+    throw new Error("Member has too many sessions to remove in one operation")
+  }
   await Promise.all(sessions.map((s) => ctx.db.delete(s._id)))
   await ctx.db.delete(member._id)
 }

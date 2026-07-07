@@ -1,16 +1,24 @@
 import { useEffect, useState } from "react"
 
 export function useElapsedMs(since: number | null): number {
-  const [ms, setMs] = useState(since ? Date.now() - since : 0)
+  const [ms, setMs] = useState(0)
 
   useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined
+    let intervalId: ReturnType<typeof setInterval> | undefined
+
     if (!since) {
-      setMs(0)
-      return
+      timeoutId = setTimeout(() => setMs(0), 0)
+    } else {
+      const update = () => setMs(Date.now() - since)
+      timeoutId = setTimeout(update, 0)
+      intervalId = setInterval(update, 1000)
     }
-    setMs(Date.now() - since)
-    const id = setInterval(() => setMs(Date.now() - since), 1000)
-    return () => clearInterval(id)
+
+    return () => {
+      if (timeoutId !== undefined) clearTimeout(timeoutId)
+      if (intervalId !== undefined) clearInterval(intervalId)
+    }
   }, [since])
 
   return ms

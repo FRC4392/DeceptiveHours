@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server"
 import { v } from "convex/values"
 import { requireMentor } from "./authz"
+import type { Doc } from "./_generated/dataModel"
 
 const teamMemberFields = {
   workosUserId: v.string(),
@@ -17,24 +18,54 @@ const teamMemberDoc = v.object({
   ...teamMemberFields,
 })
 
-// Public: used by the kiosk to resolve a scanned/typed 6-digit memberId.
+// Shape returned by the two public (unauthenticated) lookups below.
+// Deliberately excludes `email` and `workosUserId` — those queries are
+// reachable by anyone who can guess a memberId, so PII and internal WorkOS
+// identifiers must not ride along in the response even though the current
+// UI doesn't render them.
+const publicMemberDoc = v.object({
+  _id: v.id("teamMembers"),
+  firstName: v.string(),
+  lastName: v.string(),
+  memberId: v.string(),
+  type: v.union(v.literal("student"), v.literal("mentor")),
+})
+
+function toPublicMemberDoc(member: Doc<"teamMembers">) {
+  const { _id, firstName, lastName, memberId, type } = member
+  return { _id, firstName, lastName, memberId, type }
+}
+
+const memberIdPattern = /^4392\d{6}$/
+
+function validateMemberId(memberId: string) {
+  if (!memberIdPattern.test(memberId)) {
+    throw new Error("Member ID must be a 10-digit number starting with 4392")
+  }
+}
+
+// Mentor-only: used by the unlocked kiosk to resolve a scanned/typed memberId.
 export const lookupByMemberId = query({
   args: { memberId: v.string() },
-  returns: v.union(teamMemberDoc, v.null()),
+  returns: v.union(publicMemberDoc, v.null()),
   handler: async (ctx, { memberId }) => {
-    return ctx.db
+    await requireMentor(ctx)
+    const member = await ctx.db
       .query("teamMembers")
       .withIndex("by_memberId", (q) => q.eq("memberId", memberId))
       .unique()
+    return member && toPublicMemberDoc(member)
   },
 })
 
-// Public: used by the kiosk to resolve a member by document id.
+// Mentor-only: used by the unlocked kiosk and member detail page.
 export const getById = query({
   args: { id: v.id("teamMembers") },
-  returns: v.union(teamMemberDoc, v.null()),
+  returns: v.union(publicMemberDoc, v.null()),
   handler: async (ctx, { id }) => {
-    return ctx.db.get(id)
+    await requireMentor(ctx)
+    const member = await ctx.db.get(id)
+    return member && toPublicMemberDoc(member)
   },
 })
 
@@ -62,6 +93,9 @@ export const update = mutation({
   returns: v.null(),
   handler: async (ctx, { id, ...fields }) => {
     await requireMentor(ctx)
+    validateMemberId(fields.memberId)
+    const member = await ctx.db.get(id)
+    if (!member) throw new Error("Member not found")
     const existing = await ctx.db
       .query("teamMembers")
       .withIndex("by_memberId", (q) => q.eq("memberId", fields.memberId))
@@ -83,7 +117,10 @@ export const remove = mutation({
     const sessions = await ctx.db
       .query("clockSessions")
       .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", id))
-      .collect()
+      .take(500)
+    if (sessions.length === 500) {
+      throw new Error("Member has too many sessions to remove in one operation")
+    }
     await Promise.all(sessions.map((s) => ctx.db.delete(s._id)))
     await ctx.db.delete(id)
     return null
