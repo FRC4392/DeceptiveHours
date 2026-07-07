@@ -1,6 +1,7 @@
 import { mutation, query } from "./_generated/server"
 import { v } from "convex/values"
 import { requireMentor } from "./authz"
+import type { Doc } from "./_generated/dataModel"
 
 const teamMemberFields = {
   workosUserId: v.string(),
@@ -17,24 +18,44 @@ const teamMemberDoc = v.object({
   ...teamMemberFields,
 })
 
+// Shape returned by the two public (unauthenticated) lookups below.
+// Deliberately excludes `email` and `workosUserId` — those queries are
+// reachable by anyone who can guess a memberId, so PII and internal WorkOS
+// identifiers must not ride along in the response even though the current
+// UI doesn't render them.
+const publicMemberDoc = v.object({
+  _id: v.id("teamMembers"),
+  firstName: v.string(),
+  lastName: v.string(),
+  memberId: v.string(),
+  type: v.union(v.literal("student"), v.literal("mentor")),
+})
+
+function toPublicMemberDoc(member: Doc<"teamMembers">) {
+  const { _id, firstName, lastName, memberId, type } = member
+  return { _id, firstName, lastName, memberId, type }
+}
+
 // Public: used by the kiosk to resolve a scanned/typed 6-digit memberId.
 export const lookupByMemberId = query({
   args: { memberId: v.string() },
-  returns: v.union(teamMemberDoc, v.null()),
+  returns: v.union(publicMemberDoc, v.null()),
   handler: async (ctx, { memberId }) => {
-    return ctx.db
+    const member = await ctx.db
       .query("teamMembers")
       .withIndex("by_memberId", (q) => q.eq("memberId", memberId))
       .unique()
+    return member && toPublicMemberDoc(member)
   },
 })
 
 // Public: used by the kiosk to resolve a member by document id.
 export const getById = query({
   args: { id: v.id("teamMembers") },
-  returns: v.union(teamMemberDoc, v.null()),
+  returns: v.union(publicMemberDoc, v.null()),
   handler: async (ctx, { id }) => {
-    return ctx.db.get(id)
+    const member = await ctx.db.get(id)
+    return member && toPublicMemberDoc(member)
   },
 })
 

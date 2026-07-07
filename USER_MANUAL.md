@@ -13,7 +13,7 @@ DeceptiveHours is the team's hour tracking system. It has two parts: a public **
 3. [Dashboard](#3-dashboard)
 4. [Team Members](#4-team-members)
 5. [Member Detail](#5-member-detail)
-6. [Adding Mentor Accounts](#6-adding-mentor-accounts)
+6. [Managing Users](#6-managing-users)
 
 ---
 
@@ -58,13 +58,13 @@ If your Member ID is not found, an error message will appear and the kiosk will 
 
 Mentors access the protected dashboard at `/login`.
 
-1. Enter your **email address** and **password**.
-2. Click **Sign In**.
-3. You will be redirected to the Dashboard.
+1. Click **Sign in with WorkOS**.
+2. You'll be taken to a WorkOS sign-in page — enter your credentials there.
+3. You'll be redirected back to the Dashboard automatically.
 
-> If you have forgotten your password, contact another mentor who can create a new account for you, or reach out to whoever manages the system.
+> Passwords and account recovery are managed by WorkOS, not by this app. If you're stuck signing in, use the "forgot password" option on the WorkOS sign-in page, or reach out to whoever manages the team's WorkOS organization.
 
-There is no public sign-up — accounts are created by existing mentors only (see [Section 6](#6-adding-mentor-accounts)).
+There is no public sign-up — accounts are created by existing mentors only (see [Section 6](#6-managing-users)).
 
 ---
 
@@ -163,17 +163,19 @@ Click the **trash icon** on any row and confirm. Sessions that are still in prog
 
 ---
 
-## 6. Adding Mentor Accounts
+## 6. Managing Users
 
-Only a currently signed-in mentor can create new accounts — there is no public sign-up.
+Only a currently signed-in mentor can invite new accounts — there is no public sign-up.
 
 1. Sign in to the mentor dashboard.
-2. In the left sidebar, click **Add Mentor Account**.
-3. Enter the new mentor's **email address** and a **temporary password**.
-4. Click **Create Account**.
-5. Share the credentials with the new mentor and ask them to sign in.
+2. In the left sidebar, click **Manage Users**.
+3. Click **Invite User** in the top-right corner.
+4. Enter the person's **email address** and choose their **Role** (Student or Mentor).
+5. Click **Invite User** to send the invitation.
 
-> Passwords cannot be changed from within the app. If a mentor needs a new password, delete their account and create a new one with a new password, or have your system administrator update it directly via the Convex dashboard.
+The invited person receives an email from WorkOS to accept the invitation and set their own password. Once accepted, they appear automatically in the Team Members roster with the role you selected — no manual account creation step is needed.
+
+> Passwords are managed entirely by WorkOS, not by this app. If someone needs a password reset, they can use the "forgot password" option on the WorkOS sign-in page — mentors can't reset passwords on a user's behalf from within DeceptiveHours.
 
 ---
 

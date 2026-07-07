@@ -41,11 +41,12 @@ export const getMemberStatus = query({
   },
 })
 
-// Public (kiosk): full session history for a member, newest first.
+// Mentor-only: full session history for a member, newest first.
 export const getForMember = query({
   args: { teamMemberId: v.id("teamMembers") },
   returns: v.array(clockSessionDoc),
   handler: async (ctx, { teamMemberId }) => {
+    await requireMentor(ctx)
     return ctx.db
       .query("clockSessions")
       .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", teamMemberId))
@@ -68,6 +69,11 @@ async function openSessionFor(
 }
 
 // Public (kiosk): open a session if none is open.
+// Member IDs are a 6-digit random suffix on a fixed "4392" prefix (~1M
+// combinations) and this endpoint has no rate limiting. Accepted risk for a
+// physical shared-kiosk app — anyone with the deployment URL could
+// brute-force IDs or remotely clock members in/out. Revisit if this ever
+// needs to be reachable outside the build space.
 export const clockIn = mutation({
   args: { teamMemberId: v.id("teamMembers") },
   returns: v.id("clockSessions"),
@@ -78,7 +84,8 @@ export const clockIn = mutation({
   },
 })
 
-// Public (kiosk): close the open session.
+// Public (kiosk): close the open session. Same ID-enumeration risk as
+// clockIn above — no rate limiting, accepted for a physical-kiosk app.
 export const clockOut = mutation({
   args: { teamMemberId: v.id("teamMembers") },
   returns: v.null(),
