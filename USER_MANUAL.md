@@ -46,7 +46,7 @@ If your mentor has given you a printed QR code:
 Once your ID is found, the member card displays:
 
 - Your name and member type (Student or Mentor)
-- Your total hours for the current year
+- Your total hours for the configured reporting range
 - How long your current session has been running (if clocked in)
 - A Clock In or Clock Out button
 
@@ -77,8 +77,19 @@ The Dashboard (`/`) gives a live overview of team activity.
 At the top of the page, three cards show:
 
 - **Currently Clocked In** — the number of members presently in a session
-- **Total Hours YTD** — all completed team hours since January 1st of the current year
+- **Total Hours** — all completed team hours in the configured or applied reporting range
 - **Total Members** — the total number of people on the roster
+
+### Hours Range
+
+Use the **Hours Range** controls to choose which completed sessions are counted.
+
+- **Apply** temporarily changes the dashboard report without changing the team default.
+- **Save Default** stores the range used by the dashboard, kiosk, and member detail pages.
+- **Reset** returns the controls to the saved default range.
+- **Export** downloads the currently displayed dashboard hours table as a CSV.
+
+If no default range has been saved yet, the app uses January 1st of the current year through now.
 
 ### Currently Clocked In
 
@@ -90,7 +101,8 @@ A table lists every team member sorted by total hours (highest first). Each row 
 
 - Name
 - Member type badge (Student / Mentor)
-- Total hours year-to-date
+- Grade, when available
+- Total hours in the selected range
 - A link to their Member Detail page
 
 ---
@@ -101,7 +113,15 @@ The Team Members page (`/members`) is where you view the roster. New people are 
 
 ### Viewing Members
 
-The page shows a table of all members with their name, type, and Member ID.
+The page shows a table of all members with their name, type, grade, and Member ID. The roster is sorted by last name, first name, and Member ID by default.
+
+Use the controls above the table to:
+
+- Search by name, email, or Member ID
+- Filter by role
+- Filter by grade
+- Sort by name, type, grade, or Member ID
+- Export the currently visible roster rows as a CSV
 
 ### Adding a Member
 
@@ -111,6 +131,15 @@ The page shows a table of all members with their name, type, and Member ID.
 4. Send the invitation.
 
 A Member ID is generated automatically (a 10-digit number beginning with `4392`) after the invited user accepts and syncs into the roster. The member can find their assigned ID on their detail page, where a QR code can also be generated for printing.
+
+### Student Info
+
+Students can have two optional fields:
+
+- **Student Start Year** — the year they started with the team.
+- **Current Grade** — grades 6 through 12, or Alumni.
+
+Grades advance automatically on July 1 each year. A student listed as grade 12 becomes Alumni after the next July 1 rollover.
 
 ### Removing a Member
 
@@ -128,19 +157,27 @@ Click any member's name or the **view icon** to open their detail page (`/member
 
 ### Member Info
 
-The card at the top shows the member's name, ID, and type. Click **Edit** to update any of these fields.
+The card at the top shows the member's name, ID, type, and student info when applicable. Click **Edit** to update these fields.
 
 ### QR Code
 
 Click **Show QR Code** to display a scannable QR code containing the member's ID. This can be screenshotted or printed and given to the member to use at the kiosk.
 
-### Year-to-Date Stats
+### Hours Range Stats
 
-A summary card shows the member's total completed hours for the current year.
+A summary card shows the member's total completed hours and completed session count for the selected reporting range.
+
+Use **Reporting Range** to temporarily change the date range for this member. Click **Export Hours** to download a CSV that includes:
+
+- Member and range details
+- Raw completed session rows
+- Daily hour totals
+- Monday-Sunday weekly hour totals
+- Total completed hours, completed session count, and active sessions omitted from the export
 
 ### Session History
 
-A full table of every clock session is shown, with columns for:
+A table of clock sessions in the selected reporting range is shown, with columns for:
 
 - **Date**
 - **Clock In** time
@@ -190,4 +227,4 @@ Ask a mentor to open your Member Detail page, find the session with the missing 
 Make sure the kiosk device has a camera and that you have granted camera permission to the site. You can always type your Member ID manually instead.
 
 **The kiosk shows the wrong hours.**  
-Hours shown are year-to-date (since January 1st of the current year) and include only completed sessions. A currently running session is shown separately as a live timer and is not counted in your total until you clock out.
+Hours shown use the saved reporting range from the dashboard and include completed sessions. A currently running session is shown separately as a live timer and is not counted in the saved completed total until you clock out.

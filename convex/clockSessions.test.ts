@@ -3,6 +3,7 @@ import { convexTest } from "convex-test"
 import { describe, expect, test } from "vitest"
 import { api } from "./_generated/api"
 import schema from "./schema"
+import { computeDisplayGrade } from "./studentInfo"
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"])
 type TestBackend = ReturnType<typeof convexTest>
@@ -147,7 +148,7 @@ describe("clock sessions", () => {
     expect(status.completedMs).toBeGreaterThan(0)
     expect(status.currentSession?.teamMemberId).toBe(studentId)
 
-    const dashboard = await mentor.query(api.dashboard.getDashboardData)
+    const dashboard = await mentor.query(api.dashboard.getDashboardData, {})
     const member = dashboard.members.find((m) => m._id === studentId)
     expect(member?.completedMs).toBeGreaterThan(0)
     expect(member?.currentSession?.teamMemberId).toBe(studentId)
@@ -181,5 +182,95 @@ describe("clock sessions", () => {
     expect(result.patched).toBeGreaterThanOrEqual(1)
     const session = await t.run((ctx) => ctx.db.get(sessionId))
     expect(session?.status).toBe("closed")
+  })
+
+  test("configured hours range drives dashboard, kiosk status, and member sessions", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+
+    await mentor.mutation(api.clockSessions.addSession, {
+      teamMemberId: studentId,
+      clockIn: 1_000,
+      clockOut: 2_000,
+    })
+    await mentor.mutation(api.clockSessions.addSession, {
+      teamMemberId: studentId,
+      clockIn: 3_000,
+      clockOut: 5_000,
+    })
+    await mentor.mutation(api.clockSessions.addSession, {
+      teamMemberId: studentId,
+      clockIn: 6_000,
+      clockOut: 9_000,
+    })
+
+    await mentor.mutation(api.settings.updateHoursRange, {
+      startAt: 2_500,
+      endAt: 6_000,
+    })
+
+    const dashboard = await mentor.query(api.dashboard.getDashboardData, {})
+    const member = dashboard.members.find((m) => m._id === studentId)
+    expect(member?.completedMs).toBe(2_000)
+    expect(dashboard.totalCompletedMs).toBe(2_000)
+
+    const status = await mentor.query(api.clockSessions.getMemberStatus, {
+      teamMemberId: studentId,
+    })
+    expect(status.completedMs).toBe(2_000)
+
+    const sessions = await mentor.query(api.clockSessions.getForMember, {
+      teamMemberId: studentId,
+    })
+    expect(sessions.map((s) => s.clockIn)).toEqual([3_000])
+
+    const overridden = await mentor.query(api.dashboard.getDashboardData, {
+      startAt: 0,
+      endAt: 10_000,
+    })
+    const overriddenMember = overridden.members.find((m) => m._id === studentId)
+    expect(overriddenMember?.completedMs).toBe(6_000)
+  })
+
+  test("student grade display advances on July 1 and rolls into alumni", async () => {
+    expect(
+      computeDisplayGrade(
+        { type: "student", studentGrade: 10, studentGradeAsOfSchoolYear: 2026 },
+        new Date("2027-06-30T12:00:00").getTime(),
+      ),
+    ).toBe(10)
+    expect(
+      computeDisplayGrade(
+        { type: "student", studentGrade: 10, studentGradeAsOfSchoolYear: 2026 },
+        new Date("2027-07-01T12:00:00").getTime(),
+      ),
+    ).toBe(11)
+    expect(
+      computeDisplayGrade(
+        { type: "student", studentGrade: 12, studentGradeAsOfSchoolYear: 2026 },
+        new Date("2027-07-01T12:00:00").getTime(),
+      ),
+    ).toBe("alumni")
+  })
+
+  test("team member update stores student start year and grade metadata", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+
+    await mentor.mutation(api.teamMembers.update, {
+      id: studentId,
+      firstName: "Sam",
+      lastName: "Student",
+      memberId: "4392000002",
+      type: "student",
+      studentStartYear: 2024,
+      studentGrade: 9,
+      studentGradeAsOfSchoolYear: 2026,
+    })
+
+    const member = await t.run((ctx) => ctx.db.get(studentId))
+    expect(member?.studentStartYear).toBe(2024)
+    expect(member?.studentGrade).toBe(9)
+    expect(member?.studentGradeAsOfSchoolYear).toBe(2026)
   })
 })

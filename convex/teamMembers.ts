@@ -2,6 +2,12 @@ import { mutation, query } from "./_generated/server"
 import { v } from "convex/values"
 import { requireMentor } from "./authz"
 import type { Doc } from "./_generated/dataModel"
+import {
+  computeDisplayGrade,
+  currentSchoolYear,
+  displayGradeValidator,
+  studentGradeValidator,
+} from "./studentInfo"
 
 const teamMemberFields = {
   workosUserId: v.string(),
@@ -10,12 +16,16 @@ const teamMemberFields = {
   lastName: v.string(),
   memberId: v.string(),
   type: v.union(v.literal("student"), v.literal("mentor")),
+  studentStartYear: v.optional(v.number()),
+  studentGrade: v.optional(studentGradeValidator),
+  studentGradeAsOfSchoolYear: v.optional(v.number()),
 }
 
 const teamMemberDoc = v.object({
   _id: v.id("teamMembers"),
   _creationTime: v.number(),
   ...teamMemberFields,
+  displayGrade: displayGradeValidator,
 })
 
 // Shape returned by the two public (unauthenticated) lookups below.
@@ -29,11 +39,41 @@ const publicMemberDoc = v.object({
   lastName: v.string(),
   memberId: v.string(),
   type: v.union(v.literal("student"), v.literal("mentor")),
+  studentStartYear: v.optional(v.number()),
+  studentGrade: v.optional(studentGradeValidator),
+  studentGradeAsOfSchoolYear: v.optional(v.number()),
+  displayGrade: displayGradeValidator,
 })
 
 function toPublicMemberDoc(member: Doc<"teamMembers">) {
-  const { _id, firstName, lastName, memberId, type } = member
-  return { _id, firstName, lastName, memberId, type }
+  const {
+    _id,
+    firstName,
+    lastName,
+    memberId,
+    type,
+    studentStartYear,
+    studentGrade,
+    studentGradeAsOfSchoolYear,
+  } = member
+  return {
+    _id,
+    firstName,
+    lastName,
+    memberId,
+    type,
+    studentStartYear,
+    studentGrade,
+    studentGradeAsOfSchoolYear,
+    displayGrade: computeDisplayGrade(member),
+  }
+}
+
+function toTeamMemberDoc(member: Doc<"teamMembers">) {
+  return {
+    ...member,
+    displayGrade: computeDisplayGrade(member),
+  }
 }
 
 const memberIdPattern = /^4392\d{6}$/
@@ -75,7 +115,14 @@ export const list = query({
   returns: v.array(teamMemberDoc),
   handler: async (ctx) => {
     await requireMentor(ctx)
-    return ctx.db.query("teamMembers").collect()
+    const members = await ctx.db.query("teamMembers").take(500)
+    return members
+      .map(toTeamMemberDoc)
+      .sort((a, b) =>
+        a.lastName.localeCompare(b.lastName) ||
+        a.firstName.localeCompare(b.firstName) ||
+        a.memberId.localeCompare(b.memberId),
+      )
   },
 })
 
@@ -89,6 +136,9 @@ export const update = mutation({
     lastName: v.string(),
     memberId: v.string(),
     type: v.union(v.literal("student"), v.literal("mentor")),
+    studentStartYear: v.optional(v.number()),
+    studentGrade: v.optional(studentGradeValidator),
+    studentGradeAsOfSchoolYear: v.optional(v.number()),
   },
   returns: v.null(),
   handler: async (ctx, { id, ...fields }) => {
@@ -101,7 +151,36 @@ export const update = mutation({
       .withIndex("by_memberId", (q) => q.eq("memberId", fields.memberId))
       .unique()
     if (existing && existing._id !== id) throw new Error("Member ID already in use")
-    await ctx.db.patch(id, fields)
+    const patch: {
+      firstName: string
+      lastName: string
+      memberId: string
+      type: "student" | "mentor"
+      studentStartYear?: number
+      studentGrade?: 6 | 7 | 8 | 9 | 10 | 11 | 12 | "alumni"
+      studentGradeAsOfSchoolYear?: number
+    } = {
+      firstName: fields.firstName,
+      lastName: fields.lastName,
+      memberId: fields.memberId,
+      type: fields.type,
+    }
+    if (fields.type === "student") {
+      if (fields.studentStartYear !== undefined) {
+        if (!Number.isInteger(fields.studentStartYear)) throw new Error("Start year must be a whole year")
+        patch.studentStartYear = fields.studentStartYear
+      }
+      if (fields.studentGrade !== undefined) {
+        patch.studentGrade = fields.studentGrade
+        patch.studentGradeAsOfSchoolYear =
+          fields.studentGradeAsOfSchoolYear ?? currentSchoolYear()
+      }
+    } else {
+      patch.studentStartYear = undefined
+      patch.studentGrade = undefined
+      patch.studentGradeAsOfSchoolYear = undefined
+    }
+    await ctx.db.patch(id, patch)
     return null
   },
 })

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useParams, Link } from "react-router"
 import { useMutation, useQuery } from "convex/react"
 import { api } from "@convex/_generated/api"
@@ -43,10 +43,12 @@ import {
 } from "@/components/ui/table"
 import {
   ArrowLeft,
+  Download,
   Pencil,
   Plus,
   Trash2,
   QrCode,
+  RotateCcw,
 } from "lucide-react"
 import { toast } from "sonner"
 import {
@@ -54,9 +56,18 @@ import {
   formatDateTime,
   formatDuration,
   formatTotalHours,
+  fromDateInput,
+  fromDateInputExclusiveEnd,
   toDatetimeLocal,
+  toDateInput,
   fromDatetimeLocal,
 } from "@/lib/format"
+import { downloadCsv } from "@/lib/csv"
+import {
+  currentSchoolYear,
+  formatStudentGrade,
+  type StudentGrade,
+} from "@/lib/student-info"
 
 type MemberType = "student" | "mentor"
 
@@ -70,19 +81,23 @@ interface MemberForm {
   lastName: string
   memberId: string
   type: MemberType
+  studentStartYear: string
+  studentGrade: string
 }
 
-function yearStart(): number {
-  const d = new Date()
-  return new Date(d.getFullYear(), 0, 1).getTime()
-}
+type HoursRange = { startAt: number; endAt?: number }
 
 export default function MemberDetailPage() {
   const { memberId } = useParams<{ memberId: string }>()
   const id = memberId as Id<"teamMembers">
 
   const member = useQuery(api.teamMembers.getById, { id })
-  const sessions = useQuery(api.clockSessions.getForMember, { teamMemberId: id })
+  const settingsRange = useQuery(api.settings.getHoursRange)
+  const [appliedRange, setAppliedRange] = useState<HoursRange | null>(null)
+  const sessions = useQuery(api.clockSessions.getForMember, {
+    teamMemberId: id,
+    ...(appliedRange ?? {}),
+  })
   const updateMember = useMutation(api.teamMembers.update)
   const addSession = useMutation(api.clockSessions.addSession)
   const updateSession = useMutation(api.clockSessions.updateSession)
@@ -99,8 +114,21 @@ export default function MemberDetailPage() {
 
   const [deleteSessionId, setDeleteSessionId] = useState<Id<"clockSessions"> | null>(null)
   const [showQr, setShowQr] = useState(false)
+  const [startDateDraft, setStartDateDraft] = useState<string | null>(null)
+  const [endDateDraft, setEndDateDraft] = useState<string | null>(null)
 
-  if (!member || !sessions) {
+  const startDate = startDateDraft ?? (settingsRange ? toDateInput(settingsRange.startAt) : "")
+  const endDate =
+    endDateDraft ?? (settingsRange?.endAt ? toDateInput(settingsRange.endAt - 1) : "")
+
+  const rangeDraft = useMemo(() => {
+    if (!startDate) return null
+    const range: HoursRange = { startAt: fromDateInput(startDate) }
+    if (endDate) range.endAt = fromDateInputExclusiveEnd(endDate)
+    return range
+  }, [endDate, startDate])
+
+  if (member === undefined || sessions === undefined || settingsRange === undefined) {
     return (
       <div className="flex items-center justify-center py-24">
         <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
@@ -119,9 +147,8 @@ export default function MemberDetailPage() {
     )
   }
 
-  const ys = yearStart()
-  const yearSessions = sessions.filter((s) => s.clockIn >= ys && s.clockOut)
-  const totalYearMs = yearSessions.reduce((acc, s) => acc + (s.clockOut! - s.clockIn), 0)
+  const completedSessions = sessions.filter((s) => s.clockOut)
+  const totalRangeMs = completedSessions.reduce((acc, s) => acc + (s.clockOut! - s.clockIn), 0)
 
   function openAddSession() {
     const now = Date.now()
@@ -181,6 +208,9 @@ export default function MemberDetailPage() {
       lastName: member!.lastName,
       memberId: member!.memberId,
       type: member!.type,
+      studentStartYear: member!.studentStartYear ? String(member!.studentStartYear) : "",
+      studentGrade:
+        member!.studentGrade === undefined ? "" : String(member!.studentGrade),
     })
     setEditMemberOpen(true)
   }
@@ -190,7 +220,35 @@ export default function MemberDetailPage() {
     if (!memberForm) return
     setSavingMember(true)
     try {
-      await updateMember({ id, ...memberForm })
+      const payload: {
+        id: Id<"teamMembers">
+        firstName: string
+        lastName: string
+        memberId: string
+        type: MemberType
+        studentStartYear?: number
+        studentGrade?: StudentGrade
+        studentGradeAsOfSchoolYear?: number
+      } = {
+        id,
+        firstName: memberForm.firstName,
+        lastName: memberForm.lastName,
+        memberId: memberForm.memberId,
+        type: memberForm.type,
+      }
+      if (memberForm.type === "student") {
+        if (memberForm.studentStartYear.trim()) {
+          payload.studentStartYear = Number.parseInt(memberForm.studentStartYear, 10)
+        }
+        if (memberForm.studentGrade) {
+          payload.studentGrade =
+            memberForm.studentGrade === "alumni"
+              ? "alumni"
+              : (Number.parseInt(memberForm.studentGrade, 10) as StudentGrade)
+          payload.studentGradeAsOfSchoolYear = currentSchoolYear()
+        }
+      }
+      await updateMember(payload)
       toast.success("Member updated")
       setEditMemberOpen(false)
     } catch (e) {
@@ -198,6 +256,59 @@ export default function MemberDetailPage() {
     } finally {
       setSavingMember(false)
     }
+  }
+
+  function exportMemberHours() {
+    if (!member || !sessions) return
+    const activeCount = sessions.filter((s) => !s.clockOut).length
+    const daily = new Map<string, number>()
+    const weekly = new Map<string, number>()
+    for (const session of completedSessions) {
+      const duration = session.clockOut! - session.clockIn
+      const day = toDateInput(session.clockIn)
+      const week = weekLabel(session.clockIn)
+      daily.set(day, (daily.get(day) ?? 0) + duration)
+      weekly.set(week, (weekly.get(week) ?? 0) + duration)
+    }
+    downloadCsv(`${member.firstName}-${member.lastName}-hours.csv`, [
+      ["Member", `${member.firstName} ${member.lastName}`],
+      ["Member ID", member.memberId],
+      ["Range Start", startDate],
+      ["Range End", endDate || "Now"],
+      ["Total Hours", formatTotalHours(totalRangeMs)],
+      ["Completed Sessions", completedSessions.length],
+      ["Active Sessions Omitted", activeCount],
+      [],
+      ["Sessions"],
+      ["Date", "Clock In", "Clock Out", "Duration Hours"],
+      ...completedSessions.map((session) => [
+        formatDate(session.clockIn),
+        formatDateTime(session.clockIn),
+        formatDateTime(session.clockOut!),
+        formatTotalHours(session.clockOut! - session.clockIn),
+      ]),
+      [],
+      ["Daily Summary"],
+      ["Date", "Hours"],
+      ...Array.from(daily.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([day, ms]) => [day, formatTotalHours(ms)]),
+      [],
+      ["Weekly Summary"],
+      ["Week", "Hours"],
+      ...Array.from(weekly.entries())
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([week, ms]) => [week, formatTotalHours(ms)]),
+    ])
+  }
+
+  function applyRange() {
+    if (!rangeDraft) return
+    if (rangeDraft.endAt !== undefined && rangeDraft.endAt <= rangeDraft.startAt) {
+      toast.error("End date must be after start date")
+      return
+    }
+    setAppliedRange(rangeDraft)
   }
 
   return (
@@ -266,24 +377,95 @@ export default function MemberDetailPage() {
                 </Badge>
               </div>
             </div>
+            {member.type === "student" && (
+              <>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Student Start Year
+                  </p>
+                  <p className="mt-1 font-medium">{member.studentStartYear ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Grade
+                  </p>
+                  <p className="mt-1 font-medium">
+                    {formatStudentGrade(member.displayGrade) || "—"}
+                  </p>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Year-to-Date</CardTitle>
+            <CardTitle>Hours Range</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="text-center">
-              <p className="font-heading text-4xl font-extrabold italic tabular-nums">{formatTotalHours(totalYearMs)}</p>
+              <p className="font-heading text-4xl font-extrabold italic tabular-nums">{formatTotalHours(totalRangeMs)}</p>
               <p className="text-sm text-muted-foreground">total hours</p>
             </div>
             <div className="text-center text-sm text-muted-foreground">
-              <p>{yearSessions.length} completed sessions</p>
+              <p>{completedSessions.length} completed sessions</p>
             </div>
           </CardContent>
         </Card>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Reporting Range</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="member-start">Start date</Label>
+              <Input
+                id="member-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDateDraft(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="member-end">End date</Label>
+              <Input
+                id="member-end"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDateDraft(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={applyRange}
+              disabled={!rangeDraft}
+            >
+              Apply
+            </Button>
+            <Button
+              variant="ghost"
+              className="gap-2"
+              onClick={() => {
+                setAppliedRange(null)
+                setStartDateDraft(null)
+                setEndDateDraft(null)
+              }}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={exportMemberHours}>
+              <Download className="h-4 w-4" />
+              Export Hours
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* QR Code */}
       {showQr && (
@@ -436,6 +618,43 @@ export default function MemberDetailPage() {
                   </SelectContent>
                 </Select>
               </div>
+              {memberForm.type === "student" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-2">
+                    <Label>Student Start Year</Label>
+                    <Input
+                      type="number"
+                      min="2000"
+                      max="2100"
+                      value={memberForm.studentStartYear}
+                      onChange={(e) =>
+                        setMemberForm((f) => f && { ...f, studentStartYear: e.target.value })
+                      }
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Current Grade</Label>
+                    <Select
+                      value={memberForm.studentGrade}
+                      onValueChange={(v) =>
+                        setMemberForm((f) => f && { ...f, studentGrade: v ?? "" })
+                      }
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Grade" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {[6, 7, 8, 9, 10, 11, 12].map((grade) => (
+                          <SelectItem key={grade} value={String(grade)}>
+                            Grade {grade}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="alumni">Alumni</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
               <DialogFooter>
                 <Button
                   type="button"
@@ -529,4 +748,15 @@ export default function MemberDetailPage() {
       </AlertDialog>
     </div>
   )
+}
+
+function weekLabel(ts: number): string {
+  const start = new Date(ts)
+  start.setHours(0, 0, 0, 0)
+  const day = start.getDay()
+  const diffToMonday = day === 0 ? -6 : 1 - day
+  start.setDate(start.getDate() + diffToMonday)
+  const end = new Date(start)
+  end.setDate(start.getDate() + 6)
+  return `${toDateInput(start.getTime())} to ${toDateInput(end.getTime())}`
 }
