@@ -36,11 +36,20 @@ function toPublicMemberDoc(member: Doc<"teamMembers">) {
   return { _id, firstName, lastName, memberId, type }
 }
 
-// Public: used by the kiosk to resolve a scanned/typed 6-digit memberId.
+const memberIdPattern = /^4392\d{6}$/
+
+function validateMemberId(memberId: string) {
+  if (!memberIdPattern.test(memberId)) {
+    throw new Error("Member ID must be a 10-digit number starting with 4392")
+  }
+}
+
+// Mentor-only: used by the unlocked kiosk to resolve a scanned/typed memberId.
 export const lookupByMemberId = query({
   args: { memberId: v.string() },
   returns: v.union(publicMemberDoc, v.null()),
   handler: async (ctx, { memberId }) => {
+    await requireMentor(ctx)
     const member = await ctx.db
       .query("teamMembers")
       .withIndex("by_memberId", (q) => q.eq("memberId", memberId))
@@ -49,11 +58,12 @@ export const lookupByMemberId = query({
   },
 })
 
-// Public: used by the kiosk to resolve a member by document id.
+// Mentor-only: used by the unlocked kiosk and member detail page.
 export const getById = query({
   args: { id: v.id("teamMembers") },
   returns: v.union(publicMemberDoc, v.null()),
   handler: async (ctx, { id }) => {
+    await requireMentor(ctx)
     const member = await ctx.db.get(id)
     return member && toPublicMemberDoc(member)
   },
@@ -83,6 +93,9 @@ export const update = mutation({
   returns: v.null(),
   handler: async (ctx, { id, ...fields }) => {
     await requireMentor(ctx)
+    validateMemberId(fields.memberId)
+    const member = await ctx.db.get(id)
+    if (!member) throw new Error("Member not found")
     const existing = await ctx.db
       .query("teamMembers")
       .withIndex("by_memberId", (q) => q.eq("memberId", fields.memberId))
@@ -104,7 +117,10 @@ export const remove = mutation({
     const sessions = await ctx.db
       .query("clockSessions")
       .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", id))
-      .collect()
+      .take(500)
+    if (sessions.length === 500) {
+      throw new Error("Member has too many sessions to remove in one operation")
+    }
     await Promise.all(sessions.map((s) => ctx.db.delete(s._id)))
     await ctx.db.delete(id)
     return null

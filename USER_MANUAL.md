@@ -2,7 +2,7 @@
 
 **Deceivers Robotics Team 4392**
 
-DeceptiveHours is the team's hour tracking system. It has two parts: a public **Time Clock Kiosk** that any team member uses to clock in and out, and a protected **Mentor Dashboard** for managing the roster and reviewing hours.
+DeceptiveHours is the team's hour tracking system. It has two parts: a mentor-unlocked **Time Clock Kiosk** that team members use to clock in and out, and a protected **Mentor Dashboard** for managing the roster and reviewing hours.
 
 ---
 
@@ -19,7 +19,7 @@ DeceptiveHours is the team's hour tracking system. It has two parts: a public **
 
 ## 1. Time Clock Kiosk
 
-The kiosk is the home screen (`/`) and is always public — no login required. It is designed to run on a shared screen such as a Raspberry Pi display at the build space entrance.
+The kiosk is at `/clock`. A mentor must sign in on the kiosk browser first, then the shared screen can stay open for team members to clock in and out.
 
 ### Clocking In or Out
 
@@ -39,7 +39,7 @@ If your mentor has given you a printed QR code:
 3. Hold your QR code up to the camera — it will scan automatically.
 4. Your member card will appear as if you had typed your ID manually.
 
-> **Note:** QR scanning requires a device with a camera and a browser that supports the BarcodeDetector API (Chrome and Edge on desktop/Android). It is not supported on Safari.
+> **Note:** QR scanning requires a device with a camera and browser camera permissions. The scanner uses `jsQR`, so typing the Member ID manually remains the fallback if camera access is unavailable.
 
 ### What the Kiosk Shows
 
@@ -70,7 +70,7 @@ There is no public sign-up — accounts are created by existing mentors only (se
 
 ## 3. Dashboard
 
-The Dashboard (`/dashboard`) gives a live overview of team activity.
+The Dashboard (`/`) gives a live overview of team activity.
 
 ### Summary Cards
 
@@ -97,7 +97,7 @@ A table lists every team member sorted by total hours (highest first). Each row 
 
 ## 4. Team Members
 
-The Team Members page (`/members`) is where you manage the roster.
+The Team Members page (`/members`) is where you view the roster. New people are invited from **Manage Users** (`/users`) and sync into the roster after accepting their WorkOS invitation.
 
 ### Viewing Members
 
@@ -105,13 +105,12 @@ The page shows a table of all members with their name, type, and Member ID.
 
 ### Adding a Member
 
-1. Click **Add Member** in the top-right corner.
-2. Fill in:
-   - **First Name** and **Last Name**
-   - **Member Type** — Student or Mentor
-3. Click **Add Member**.
+1. Open **Manage Users** (`/users`).
+2. Click **Invite User**.
+3. Enter the person's email address and choose **Student** or **Mentor**.
+4. Send the invitation.
 
-A Member ID is generated automatically (a 10-digit number beginning with `4392`). The member can find their assigned ID on their detail page, where a QR code can also be generated for printing.
+A Member ID is generated automatically (a 10-digit number beginning with `4392`) after the invited user accepts and syncs into the roster. The member can find their assigned ID on their detail page, where a QR code can also be generated for printing.
 
 ### Removing a Member
 
@@ -188,7 +187,7 @@ Ask a mentor to check that your name appears in the Team Members list and that y
 Ask a mentor to open your Member Detail page, find the session with the missing clock-out time, and edit it to add the correct time.
 
 **The QR scanner isn't working.**  
-Make sure you are using Chrome or Edge (not Safari), and that you have granted camera permission to the site. If the browser doesn't support QR scanning, you can always type your Member ID manually instead.
+Make sure the kiosk device has a camera and that you have granted camera permission to the site. You can always type your Member ID manually instead.
 
 **The kiosk shows the wrong hours.**  
 Hours shown are year-to-date (since January 1st of the current year) and include only completed sessions. A currently running session is shown separately as a live timer and is not counted in your total until you clock out.

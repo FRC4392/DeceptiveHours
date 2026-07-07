@@ -44,7 +44,7 @@ export default function LoginPage() {
         </div>
       </AuthLoading>
       <Authenticated>
-        <Navigate to="/dashboard" replace />
+        <Navigate to="/" replace />
       </Authenticated>
       <Unauthenticated>
         <SignInCard />

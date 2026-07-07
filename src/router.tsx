@@ -1,7 +1,7 @@
-import { createBrowserRouter } from "react-router"
+import { createBrowserRouter, Navigate } from "react-router"
 import RootLayout from "@/layouts/root-layout"
 import MentorLayout from "@/layouts/mentor-layout"
-import TimeClockPage from "@/routes/time-clock"
+import ClockPage from "@/routes/clock"
 import LoginPage from "@/routes/login"
 import DashboardPage from "@/routes/dashboard"
 import MembersPage from "@/routes/members/index"
@@ -13,8 +13,8 @@ export const router = createBrowserRouter([
     Component: RootLayout,
     children: [
       {
-        path: "/",
-        Component: TimeClockPage,
+        path: "/clock",
+        Component: ClockPage,
       },
       {
         path: "/login",
@@ -24,8 +24,12 @@ export const router = createBrowserRouter([
         Component: MentorLayout,
         children: [
           {
-            path: "/dashboard",
+            index: true,
             Component: DashboardPage,
+          },
+          {
+            path: "/dashboard",
+            element: <Navigate to="/" replace />,
           },
           {
             path: "/members",
