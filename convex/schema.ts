@@ -9,9 +9,29 @@ export default defineSchema({
     lastName: v.string(),
     memberId: v.string(),
     type: v.union(v.literal("student"), v.literal("mentor")),
+    studentStartYear: v.optional(v.number()),
+    studentGrade: v.optional(
+      v.union(
+        v.literal(6),
+        v.literal(7),
+        v.literal(8),
+        v.literal(9),
+        v.literal(10),
+        v.literal(11),
+        v.literal(12),
+        v.literal("alumni"),
+      ),
+    ),
+    studentGradeAsOfSchoolYear: v.optional(v.number()),
   })
     .index("by_memberId", ["memberId"])
     .index("by_workosUserId", ["workosUserId"]),
+
+  appSettings: defineTable({
+    key: v.string(),
+    hoursRangeStart: v.optional(v.number()),
+    hoursRangeEnd: v.optional(v.number()),
+  }).index("by_key", ["key"]),
 
   clockSessions: defineTable({
     teamMemberId: v.id("teamMembers"),

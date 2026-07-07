@@ -237,7 +237,7 @@ function MemberCard({
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-lg bg-muted p-4 text-center">
             <p className="mb-1 font-mono text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Year Hours
+              Range Hours
             </p>
             <p className="font-heading text-3xl font-extrabold italic tabular-nums text-foreground">
               {formatTotalHours(totalMs)}

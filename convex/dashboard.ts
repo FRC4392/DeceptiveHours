@@ -1,13 +1,10 @@
 import { query } from "./_generated/server"
 import { v } from "convex/values"
 import { requireMentor } from "./authz"
-import type { Doc, Id } from "./_generated/dataModel"
+import type { Id } from "./_generated/dataModel"
 import type { QueryCtx } from "./_generated/server"
-
-function yearStart(): number {
-  const d = new Date()
-  return new Date(d.getFullYear(), 0, 1).getTime()
-}
+import { completedMsForRange, resolveHoursRange, sessionStatus } from "./hours"
+import { computeDisplayGrade, displayGradeValidator, studentGradeValidator } from "./studentInfo"
 
 const clockSessionDoc = v.object({
   _id: v.id("clockSessions"),
@@ -27,13 +24,13 @@ const memberWithStats = v.object({
   lastName: v.string(),
   memberId: v.string(),
   type: v.union(v.literal("student"), v.literal("mentor")),
+  studentStartYear: v.optional(v.number()),
+  studentGrade: v.optional(studentGradeValidator),
+  studentGradeAsOfSchoolYear: v.optional(v.number()),
+  displayGrade: displayGradeValidator,
   completedMs: v.number(),
   currentSession: v.union(clockSessionDoc, v.null()),
 })
-
-function sessionStatus(session: Doc<"clockSessions">): "open" | "closed" {
-  return session.status ?? (session.clockOut === undefined ? "open" : "closed")
-}
 
 async function openSessionFor(ctx: QueryCtx, teamMemberId: Id<"teamMembers">) {
   const indexed = await ctx.db
@@ -52,44 +49,48 @@ async function openSessionFor(ctx: QueryCtx, teamMemberId: Id<"teamMembers">) {
   return recent.find((s) => sessionStatus(s) === "open") ?? null
 }
 
-async function completedMsForYear(ctx: QueryCtx, teamMemberId: Id<"teamMembers">) {
-  const ys = yearStart()
-  const sessions = await ctx.db
-    .query("clockSessions")
-    .withIndex("by_teamMemberId_clockIn", (q) =>
-      q.eq("teamMemberId", teamMemberId).gte("clockIn", ys),
-    )
-    .take(500)
-
-  return sessions.reduce((acc, s) => {
-    if (sessionStatus(s) === "closed" && s.clockOut) return acc + (s.clockOut - s.clockIn)
-    return acc
-  }, 0)
-}
-
 // Mentor-only: aggregate roster + hours for the authenticated dashboard.
 export const getDashboardData = query({
-  args: {},
+  args: {
+    startAt: v.optional(v.number()),
+    endAt: v.optional(v.number()),
+  },
   returns: v.object({
     members: v.array(memberWithStats),
     currentlySignedIn: v.array(memberWithStats),
     totalCompletedMs: v.number(),
+    hoursRange: v.object({
+      startAt: v.number(),
+      endAt: v.optional(v.number()),
+    }),
   }),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     await requireMentor(ctx)
 
-    const members = await ctx.db.query("teamMembers").collect()
+    const hoursRange = await resolveHoursRange(ctx, args)
+    const members = await ctx.db.query("teamMembers").take(500)
     const membersWithStats = await Promise.all(members.map(async (member) => {
       const [currentSession, completedMs] = await Promise.all([
         openSessionFor(ctx, member._id),
-        completedMsForYear(ctx, member._id),
+        completedMsForRange(ctx, member._id, hoursRange),
       ])
-      return { ...member, completedMs, currentSession }
+      return {
+        ...member,
+        displayGrade: computeDisplayGrade(member),
+        completedMs,
+        currentSession,
+      }
     }))
+    membersWithStats.sort((a, b) =>
+      b.completedMs - a.completedMs ||
+      a.lastName.localeCompare(b.lastName) ||
+      a.firstName.localeCompare(b.firstName) ||
+      a.memberId.localeCompare(b.memberId),
+    )
 
     const currentlySignedIn = membersWithStats.filter((m) => m.currentSession !== null)
     const totalCompletedMs = membersWithStats.reduce((acc, m) => acc + m.completedMs, 0)
 
-    return { members: membersWithStats, currentlySignedIn, totalCompletedMs }
+    return { members: membersWithStats, currentlySignedIn, totalCompletedMs, hoursRange }
   },
 })

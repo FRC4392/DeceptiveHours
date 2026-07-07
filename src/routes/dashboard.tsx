@@ -1,8 +1,12 @@
-import { useQuery } from "convex/react"
+import { useMemo, useState } from "react"
+import { useMutation, useQuery } from "convex/react"
 import { Link } from "react-router"
 import { api } from "@convex/_generated/api"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import {
   Table,
   TableBody,
@@ -11,12 +15,39 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { formatDuration, formatTotalHours } from "@/lib/format"
+import {
+  formatDate,
+  formatDuration,
+  formatTotalHours,
+  fromDateInput,
+  fromDateInputExclusiveEnd,
+  toDateInput,
+} from "@/lib/format"
+import { downloadCsv } from "@/lib/csv"
+import { formatStudentGrade } from "@/lib/student-info"
 import { useElapsedMs } from "@/hooks/use-elapsed-ms"
-import { Clock, Timer, Users, UserCheck } from "lucide-react"
+import { Clock, Download, RotateCcw, Save, Timer, Users, UserCheck } from "lucide-react"
+import { toast } from "sonner"
+
+type HoursRange = { startAt: number; endAt?: number }
 
 export default function DashboardPage() {
-  const data = useQuery(api.dashboard.getDashboardData)
+  const [appliedRange, setAppliedRange] = useState<HoursRange | null>(null)
+  const [startDateDraft, setStartDateDraft] = useState<string | null>(null)
+  const [endDateDraft, setEndDateDraft] = useState<string | null>(null)
+  const data = useQuery(api.dashboard.getDashboardData, appliedRange ?? {})
+  const updateHoursRange = useMutation(api.settings.updateHoursRange)
+
+  const startDate = startDateDraft ?? (data ? toDateInput(data.hoursRange.startAt) : "")
+  const endDate =
+    endDateDraft ?? (data?.hoursRange.endAt ? toDateInput(data.hoursRange.endAt - 1) : "")
+
+  const rangeDraft = useMemo(() => {
+    if (!startDate) return null
+    const range: HoursRange = { startAt: fromDateInput(startDate) }
+    if (endDate) range.endAt = fromDateInputExclusiveEnd(endDate)
+    return range
+  }, [endDate, startDate])
 
   if (!data) {
     return (
@@ -26,12 +57,108 @@ export default function DashboardPage() {
     )
   }
 
+  async function saveGlobalRange() {
+    if (!rangeDraft) return
+    try {
+      await updateHoursRange(rangeDraft)
+      setAppliedRange(null)
+      toast.success("Default hours range updated")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save hours range")
+    }
+  }
+
+  function applyRange() {
+    if (!rangeDraft) return
+    if (rangeDraft.endAt !== undefined && rangeDraft.endAt <= rangeDraft.startAt) {
+      toast.error("End date must be after start date")
+      return
+    }
+    setAppliedRange(rangeDraft)
+  }
+
+  function exportDashboardCsv() {
+    if (!data) return
+    downloadCsv("dashboard-hours.csv", [
+      ["Name", "Email", "Role", "Grade", "Member ID", "Hours"],
+      ...data.members.map((member) => [
+        `${member.firstName} ${member.lastName}`,
+        member.email,
+        member.type,
+        formatStudentGrade(member.displayGrade),
+        member.memberId,
+        formatTotalHours(member.completedMs),
+      ]),
+    ])
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="font-heading text-2xl font-bold italic uppercase tracking-tight">Dashboard</h1>
         <p className="text-muted-foreground">Overview of team hours and attendance</p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Hours Range</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 lg:flex-row lg:items-end">
+          <div className="grid gap-2 sm:grid-cols-2 lg:w-auto">
+            <div className="space-y-2">
+              <Label htmlFor="dashboard-start">Start date</Label>
+              <Input
+                id="dashboard-start"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDateDraft(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="dashboard-end">End date</Label>
+              <Input
+                id="dashboard-end"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDateDraft(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={applyRange}
+              disabled={!rangeDraft}
+            >
+              Apply
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={saveGlobalRange} disabled={!rangeDraft}>
+              <Save className="h-4 w-4" />
+              Save Default
+            </Button>
+            <Button
+              variant="ghost"
+              className="gap-2"
+              onClick={() => {
+                setAppliedRange(null)
+                setStartDateDraft(null)
+                setEndDateDraft(null)
+              }}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reset
+            </Button>
+            <Button variant="outline" className="gap-2" onClick={exportDashboardCsv}>
+              <Download className="h-4 w-4" />
+              Export
+            </Button>
+          </div>
+          <p className="text-sm text-muted-foreground lg:ml-auto">
+            Showing {formatDate(data.hoursRange.startAt)}
+            {data.hoursRange.endAt ? ` to ${formatDate(data.hoursRange.endAt - 1)}` : " to now"}
+          </p>
+        </CardContent>
+      </Card>
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -53,7 +180,7 @@ export default function DashboardPage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="not-italic normal-case font-mono text-xs font-medium tracking-wider text-muted-foreground">
-              Total Team Hours (YTD)
+              Total Team Hours
             </CardTitle>
             <Clock className="h-4 w-4 text-primary" />
           </CardHeader>
@@ -61,7 +188,7 @@ export default function DashboardPage() {
             <p className="font-heading text-3xl font-extrabold italic">
               {formatTotalHours(data.totalCompletedMs)}
             </p>
-            <p className="text-xs text-muted-foreground">completed hours this year</p>
+            <p className="text-xs text-muted-foreground">completed hours in range</p>
           </CardContent>
         </Card>
 
@@ -112,14 +239,15 @@ export default function DashboardPage() {
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Type</TableHead>
+                <TableHead>Grade</TableHead>
                 <TableHead>Member ID</TableHead>
-                <TableHead className="text-right">Hours (YTD)</TableHead>
+                <TableHead className="text-right">Hours</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {data.members.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={4} className="py-8 text-center text-muted-foreground">
+                  <TableCell colSpan={5} className="py-8 text-center text-muted-foreground">
                     No members yet.{" "}
                     <Link to="/users" className="text-primary underline-offset-4 hover:underline">
                       Invite your first user →
@@ -128,8 +256,6 @@ export default function DashboardPage() {
                 </TableRow>
               )}
               {data.members
-                .slice()
-                .sort((a, b) => b.completedMs - a.completedMs)
                 .map((member) => (
                   <TableRow
                     key={member._id}
@@ -148,6 +274,7 @@ export default function DashboardPage() {
                         {member.type}
                       </Badge>
                     </TableCell>
+                    <TableCell>{formatStudentGrade(member.displayGrade) || "—"}</TableCell>
                     <TableCell className="font-mono text-sm text-muted-foreground">
                       {member.memberId}
                     </TableCell>

@@ -4,10 +4,11 @@ Hour tracking app for Deceivers Robotics Team 4392. Members clock in and out via
 
 ## Features
 
-- **Time Clock Kiosk** — mentor-unlocked screen where members enter or scan their Member ID to clock in/out. Shows live session timer and year-to-date hours.
-- **Mentor Dashboard** — protected view showing currently clocked-in members, total team hours YTD, and a full roster sorted by hours.
-- **Team Member Management** — add and remove members. Member IDs are auto-generated (10-digit, prefixed with `4392`).
-- **Member Detail** — view and edit member info, generate a QR code for their ID, and manage their full session history.
+- **Time Clock Kiosk** — mentor-unlocked screen where members enter or scan their Member ID to clock in/out. Shows live session timer and hours for the configured reporting range.
+- **Mentor Dashboard** — protected view showing currently clocked-in members, configurable total team hours, a roster sorted by hours, and CSV export.
+- **Team Member Management** — add and remove members. Member IDs are auto-generated (10-digit, prefixed with `4392`), and roster tables support search, filters, sorting, and CSV export.
+- **Student Metadata** — store student start year and grade. Grades advance automatically each July 1 and become Alumni after grade 12.
+- **Member Detail** — view and edit member info, generate a QR code, manage session history, choose temporary reporting ranges, and export individual hours with daily and weekly summaries.
 - **QR Scanning** — kiosk supports camera-based QR code scanning with `jsQR`.
 
 ## Stack
@@ -83,7 +84,7 @@ This starts both the Vite dev server and the Convex function watcher concurrentl
 | `http://localhost:5174/` | Mentor dashboard |
 | `http://localhost:5174/clock` | Mentor-unlocked time clock kiosk |
 | `http://localhost:5174/login` | Mentor sign-in |
-| `http://localhost:5174/members` | Team member management |
+| `http://localhost:5174/members` | Team member roster, filtering, exports, and detail links |
 | `http://localhost:5174/users` | Manage users — invite mentors/students by email |
 
 ## Deployment
@@ -144,3 +145,14 @@ sign-up flow. Inviting sends a WorkOS invitation to the given email with the
 chosen role (`student` or `mentor`); the `teamMembers` roster row is created
 automatically once the invite is accepted, synced from a WorkOS webhook (see
 `convex/auth.ts`).
+
+## Reporting Ranges and Exports
+
+The dashboard stores one global hours range used by the dashboard, kiosk, and
+member detail pages. Existing deployments default to January 1 of the current
+calendar year until a mentor saves a different start/end date. Dashboard and
+member detail pages can apply temporary ranges without changing that default.
+
+Roster and dashboard exports are browser-generated CSV files for the currently
+visible rows. Member detail exports include raw session rows plus daily and
+Monday-Sunday weekly summaries for the selected range.

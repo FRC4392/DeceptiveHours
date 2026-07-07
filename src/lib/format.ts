@@ -43,3 +43,19 @@ export function toDatetimeLocal(ts: number): string {
 export function fromDatetimeLocal(s: string): number {
   return new Date(s).getTime()
 }
+
+export function toDateInput(ts: number): string {
+  const d = new Date(ts)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+export function fromDateInput(s: string): number {
+  return new Date(`${s}T00:00`).getTime()
+}
+
+export function fromDateInputExclusiveEnd(s: string): number {
+  const d = new Date(`${s}T00:00`)
+  d.setDate(d.getDate() + 1)
+  return d.getTime()
+}

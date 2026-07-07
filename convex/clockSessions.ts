@@ -3,12 +3,12 @@ import type { QueryCtx, MutationCtx } from "./_generated/server"
 import type { Id } from "./_generated/dataModel"
 import { v } from "convex/values"
 import { requireMentor } from "./authz"
-import type { Doc } from "./_generated/dataModel"
-
-function yearStart(): number {
-  const d = new Date()
-  return new Date(d.getFullYear(), 0, 1).getTime()
-}
+import {
+  completedMsForRange,
+  getConfiguredHoursRange,
+  sessionStatus,
+  validateHoursRange,
+} from "./hours"
 
 const clockSessionDoc = v.object({
   _id: v.id("clockSessions"),
@@ -18,10 +18,6 @@ const clockSessionDoc = v.object({
   clockOut: v.optional(v.number()),
   status: v.optional(v.union(v.literal("open"), v.literal("closed"))),
 })
-
-function sessionStatus(session: Doc<"clockSessions">): "open" | "closed" {
-  return session.status ?? (session.clockOut === undefined ? "open" : "closed")
-}
 
 function validateClockRange(clockIn: number, clockOut?: number) {
   if (!Number.isFinite(clockIn)) throw new Error("Clock in must be a valid time")
@@ -39,51 +35,48 @@ async function requireMember(ctx: QueryCtx | MutationCtx, id: Id<"teamMembers">)
   return member
 }
 
-async function yearCompletedMs(
-  ctx: QueryCtx,
-  teamMemberId: Id<"teamMembers">,
-): Promise<number> {
-  const ys = yearStart()
-  const sessions = await ctx.db
-    .query("clockSessions")
-    .withIndex("by_teamMemberId_clockIn", (q) =>
-      q.eq("teamMemberId", teamMemberId).gte("clockIn", ys),
-    )
-    .take(500)
-
-  return sessions.reduce((acc, s) => {
-    if (sessionStatus(s) === "closed" && s.clockOut) return acc + (s.clockOut - s.clockIn)
-    return acc
-  }, 0)
-}
-
 // Mentor-only (unlocked kiosk): completed hours this year + open session, if any.
 export const getMemberStatus = query({
   args: { teamMemberId: v.id("teamMembers") },
   returns: v.object({
     completedMs: v.number(),
     currentSession: v.union(clockSessionDoc, v.null()),
+    hoursRange: v.object({
+      startAt: v.number(),
+      endAt: v.optional(v.number()),
+    }),
   }),
   handler: async (ctx, { teamMemberId }) => {
     await requireMentor(ctx)
     await requireMember(ctx, teamMemberId)
-    const completedMs = await yearCompletedMs(ctx, teamMemberId)
+    const hoursRange = await getConfiguredHoursRange(ctx)
+    const completedMs = await completedMsForRange(ctx, teamMemberId, hoursRange)
     const currentSession = await openSessionFor(ctx, teamMemberId)
-    return { completedMs, currentSession }
+    return { completedMs, currentSession, hoursRange }
   },
 })
 
 // Mentor-only: full session history for a member, newest first.
 export const getForMember = query({
-  args: { teamMemberId: v.id("teamMembers") },
+  args: {
+    teamMemberId: v.id("teamMembers"),
+    startAt: v.optional(v.number()),
+    endAt: v.optional(v.number()),
+  },
   returns: v.array(clockSessionDoc),
-  handler: async (ctx, { teamMemberId }) => {
+  handler: async (ctx, { teamMemberId, startAt, endAt }) => {
     await requireMentor(ctx)
-    return ctx.db
+    const range = startAt === undefined ? await getConfiguredHoursRange(ctx) : { startAt, endAt }
+    validateHoursRange(range)
+    const query = ctx.db
       .query("clockSessions")
-      .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", teamMemberId))
+      .withIndex("by_teamMemberId_clockIn", (q) =>
+        q.eq("teamMemberId", teamMemberId).gte("clockIn", range.startAt),
+      )
       .order("desc")
       .take(500)
+    const sessions = await query
+    return range.endAt === undefined ? sessions : sessions.filter((s) => s.clockIn < range.endAt!)
   },
 })
 
