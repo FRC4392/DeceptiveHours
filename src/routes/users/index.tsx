@@ -46,13 +46,13 @@ type Role = "student" | "mentor"
 
 interface RemoveTarget {
   id: Id<"teamMembers">
-  workosUserId: string
+  clerkUserId: string
 }
 
 export default function UsersPage() {
   const members = useQuery(api.teamMembers.list)
-  const inviteUser = useAction(api.workos.inviteUser)
-  const removeUser = useAction(api.workos.removeUser)
+  const inviteUser = useAction(api.clerk.inviteUser)
+  const removeUser = useAction(api.clerk.removeUser)
 
   const [inviteOpen, setInviteOpen] = useState(false)
   const [email, setEmail] = useState("")
@@ -84,7 +84,7 @@ export default function UsersPage() {
     if (!removeTarget) return
     setRemoving(true)
     try {
-      await removeUser({ workosUserId: removeTarget.workosUserId })
+      await removeUser({ clerkUserId: removeTarget.clerkUserId })
       toast.success("User removed")
       setRemoveTarget(null)
     } catch (err) {
@@ -102,7 +102,7 @@ export default function UsersPage() {
         <div>
           <h1 className="font-heading text-2xl font-bold italic uppercase tracking-tight">Users</h1>
           <p className="text-muted-foreground">
-            Invite or remove WorkOS accounts. The roster syncs automatically.
+            Invite or remove Clerk accounts. The roster syncs automatically.
           </p>
         </div>
         <Button onClick={() => setInviteOpen(true)} className="gap-2">
@@ -163,8 +163,9 @@ export default function UsersPage() {
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-destructive hover:text-destructive"
+                      disabled={!member.clerkUserId}
                       onClick={() =>
-                        setRemoveTarget({ id: member._id, workosUserId: member.workosUserId })
+                        setRemoveTarget({ id: member._id, clerkUserId: member.clerkUserId })
                       }
                     >
                       <Trash2 className="h-4 w-4" />
@@ -230,7 +231,7 @@ export default function UsersPage() {
               <strong>
                 {removeMember?.firstName} {removeMember?.lastName}
               </strong>{" "}
-              from WorkOS, along with their local roster record and clock-in sessions. This
+              from Clerk, along with their local roster record and clock-in sessions. This
               action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>

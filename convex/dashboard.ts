@@ -18,7 +18,7 @@ const clockSessionDoc = v.object({
 const memberWithStats = v.object({
   _id: v.id("teamMembers"),
   _creationTime: v.number(),
-  workosUserId: v.string(),
+  clerkUserId: v.string(),
   email: v.string(),
   firstName: v.string(),
   lastName: v.string(),
@@ -75,7 +75,17 @@ export const getDashboardData = query({
         completedMsForRange(ctx, member._id, hoursRange),
       ])
       return {
-        ...member,
+        _id: member._id,
+        _creationTime: member._creationTime,
+        clerkUserId: member.clerkUserId ?? "",
+        email: member.email,
+        firstName: member.firstName,
+        lastName: member.lastName,
+        memberId: member.memberId,
+        type: member.type,
+        studentStartYear: member.studentStartYear,
+        studentGrade: member.studentGrade,
+        studentGradeAsOfSchoolYear: member.studentGradeAsOfSchoolYear,
         displayGrade: computeDisplayGrade(member),
         completedMs,
         currentSession,

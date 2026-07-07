@@ -98,7 +98,7 @@ export default function MembersPage() {
         <div>
           <h1 className="font-heading text-2xl font-bold italic uppercase tracking-tight">Team Members</h1>
           <p className="text-muted-foreground">
-            Roster synced from WorkOS. Add, invite, or remove people from Users.
+            Roster synced from Clerk. Add, invite, or remove people from Users.
           </p>
         </div>
         <Link to="/users">

@@ -11,10 +11,7 @@ export default defineConfig({
       "@convex": path.resolve(__dirname, "./convex"),
     },
   },
-  // Fixed, non-default port so this app's origin never collides with
-  // sibling WorkOS AuthKit apps also registered for localhost:5173 in the
-  // same WorkOS environment (that collision caused refreshed tokens to be
-  // minted against the wrong app's client ID — see chat history).
+  // Fixed, non-default port so local auth redirect origins stay stable.
   server: {
     port: 5174,
     strictPort: true,

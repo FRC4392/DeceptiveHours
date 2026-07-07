@@ -3,7 +3,7 @@ import { Navigate } from "react-router"
 import { Authenticated, AuthLoading, Unauthenticated, useQuery } from "convex/react"
 import { api } from "@convex/_generated/api"
 import { Button } from "@/components/ui/button"
-import { useAuth } from "@workos-inc/authkit-react"
+import { SignOutButton } from "@clerk/react"
 
 export function Spinner() {
   return (
@@ -14,8 +14,6 @@ export function Spinner() {
 }
 
 function Forbidden() {
-  const { signOut } = useAuth()
-
   return (
     <div className="flex min-h-svh items-center justify-center bg-muted/40 p-4">
       <div className="max-w-sm space-y-4 text-center">
@@ -23,9 +21,9 @@ function Forbidden() {
         <p className="text-sm text-muted-foreground">
           This screen must be unlocked by a mentor account.
         </p>
-        <Button onClick={() => signOut({ returnTo: `${window.location.origin}/login` })}>
-          Sign out
-        </Button>
+        <SignOutButton redirectUrl="/login">
+          <Button>Sign out</Button>
+        </SignOutButton>
       </div>
     </div>
   )

@@ -58,11 +58,11 @@ If your Member ID is not found, an error message will appear and the kiosk will 
 
 Mentors access the protected dashboard at `/login`.
 
-1. Click **Sign in with WorkOS**.
-2. You'll be taken to a WorkOS sign-in page — enter your credentials there.
+1. Click **Sign in with Clerk**.
+2. You'll be taken to a Clerk sign-in page — enter your credentials there.
 3. You'll be redirected back to the Dashboard automatically.
 
-> Passwords and account recovery are managed by WorkOS, not by this app. If you're stuck signing in, use the "forgot password" option on the WorkOS sign-in page, or reach out to whoever manages the team's WorkOS organization.
+> Passwords and account recovery are managed by Clerk, not by this app. If you're stuck signing in, use the "forgot password" option on the Clerk sign-in page, or reach out to whoever manages the team's Clerk organization.
 
 There is no public sign-up — accounts are created by existing mentors only (see [Section 6](#6-managing-users)).
 
@@ -109,7 +109,7 @@ A table lists every team member sorted by total hours (highest first). Each row 
 
 ## 4. Team Members
 
-The Team Members page (`/members`) is where you view the roster. New people are invited from **Manage Users** (`/users`) and sync into the roster after accepting their WorkOS invitation.
+The Team Members page (`/members`) is where you view the roster. New people are invited from **Manage Users** (`/users`) and sync into the roster after accepting their Clerk invitation.
 
 ### Viewing Members
 
@@ -209,9 +209,9 @@ Only a currently signed-in mentor can invite new accounts — there is no public
 4. Enter the person's **email address** and choose their **Role** (Student or Mentor).
 5. Click **Invite User** to send the invitation.
 
-The invited person receives an email from WorkOS to accept the invitation and set their own password. Once accepted, they appear automatically in the Team Members roster with the role you selected — no manual account creation step is needed.
+The invited person receives an email from Clerk to accept the invitation and set their own password. Once accepted, they appear automatically in the Team Members roster with the role you selected — no manual account creation step is needed.
 
-> Passwords are managed entirely by WorkOS, not by this app. If someone needs a password reset, they can use the "forgot password" option on the WorkOS sign-in page — mentors can't reset passwords on a user's behalf from within DeceptiveHours.
+> Passwords are managed entirely by Clerk, not by this app. If someone needs a password reset, they can use the "forgot password" option on the Clerk sign-in page — mentors can't reset passwords on a user's behalf from within DeceptiveHours.
 
 ---
 

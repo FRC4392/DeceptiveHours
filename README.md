@@ -19,7 +19,7 @@ Hour tracking app for Deceivers Robotics Team 4392. Members clock in and out via
 | Routing | React Router 7 (SPA mode) |
 | Styling | Tailwind CSS v4, shadcn/ui |
 | Backend | [Convex](https://convex.dev) |
-| Auth | [WorkOS AuthKit](https://workos.com/docs/authkit) |
+| Auth | [Clerk](https://clerk.com) |
 | Package manager | Bun |
 
 ## Getting Started
@@ -43,33 +43,38 @@ bunx convex dev
 
 ### First-time deployment setup
 
-Auth is handled entirely by WorkOS AuthKit — there's no local password store,
-so a brand-new deployment needs WorkOS configured before anyone can sign in:
+Auth is handled by Clerk. There is no local password store, so a brand-new
+deployment needs Clerk configured before anyone can sign in:
 
-1. Create a WorkOS organization for the team.
-2. In the WorkOS dashboard, define two Roles on that organization: `mentor`
-   and `student`. A membership's Role slug is what this app treats as
-   permission level (see `deriveType` in [`convex/auth.ts`](convex/auth.ts)).
-3. Set the server-side WorkOS env vars on the Convex deployment:
+1. Create or open a Clerk application.
+2. Activate the Clerk Convex integration at
+   `https://dashboard.clerk.com/apps/setup/convex`, then copy the Clerk
+   Frontend API URL.
+3. Create a Clerk webhook endpoint for the Convex HTTP endpoint
+   `/clerk/webhook`, subscribe it to `user.created`, `user.updated`, and
+   `user.deleted`, then copy the webhook signing secret.
+4. Set the server-side Clerk env vars on the Convex deployment:
    ```bash
-   npx convex env set WORKOS_API_KEY <...>
-   npx convex env set WORKOS_CLIENT_ID <...>
-   npx convex env set WORKOS_ORGANIZATION_ID <...>
-   npx convex env set WORKOS_ENVIRONMENT_CLIENT_ID <...>
+   npx convex env set CLERK_JWT_ISSUER_DOMAIN <clerk-frontend-api-url>
+   npx convex env set CLERK_SECRET_KEY <clerk-secret-key>
+   npx convex env set CLERK_WEBHOOK_SECRET <clerk-webhook-signing-secret>
    ```
-   See the comments in [`convex/auth.config.ts`](convex/auth.config.ts) and
-   [`convex/workos.ts`](convex/workos.ts) for what each variable does —
-   `WORKOS_ENVIRONMENT_CLIENT_ID` in particular matters if your WorkOS
-   environment hosts more than one app.
-4. Copy `.env.example` to `.env.local` and set the client-side WorkOS vars
-   (`VITE_CONVEX_URL`, `VITE_WORKOS_CLIENT_ID`, `VITE_WORKOS_REDIRECT_URI`).
-5. Invite the first mentor directly from the WorkOS dashboard (or API) with
-   the `mentor` role slug on their organization membership. This has to be
-   done in WorkOS itself — the in-app **Invite User** flow at `/users`
-   requires an already-signed-in mentor, so it can't bootstrap the first one.
-6. Sign in at `/login`. The signed-in user's `teamMembers` row is created
-   automatically from the WorkOS webhook (`convex/auth.ts`), with its type
-   synced from the Role on their organization membership.
+5. Copy `.env.example` to `.env.local` and set `VITE_CONVEX_URL` plus
+   `VITE_CLERK_PUBLISHABLE_KEY`.
+6. If migrating from the old WorkOS setup and intentionally starting fresh,
+   clear old roster/session data before inviting Clerk users:
+   ```bash
+   npx convex env set ENABLE_DESTRUCTIVE_MIGRATIONS true
+   npx convex run migrations:clearWorkosEraRoster '{"confirmation":"DELETE_WORKOS_ROSTER"}'
+   npx convex env unset ENABLE_DESTRUCTIVE_MIGRATIONS
+   ```
+7. Create the first mentor directly in Clerk and set their
+   `publicMetadata.role` to `"mentor"`. This has to be done in Clerk itself:
+   the in-app **Invite User** flow at `/users` requires an already-signed-in
+   mentor, so it cannot bootstrap the first one.
+8. Sign in at `/login`. The signed-in user's `teamMembers` row is created
+   automatically from the Clerk webhook (`convex/auth.ts`), with its type
+   synced from `publicMetadata.role`.
 
 ### Development
 
@@ -95,11 +100,12 @@ This starts both the Vite dev server and the Convex function watcher concurrentl
 bunx convex deploy
 ```
 
-Repeat the WorkOS env vars from [First-time deployment
+Repeat the Clerk env vars from [First-time deployment
 setup](#first-time-deployment-setup) against the production deployment
-(`npx convex env set <VAR> <value> --prod`), and add `VITE_WORKOS_CLIENT_ID`
-/ `VITE_WORKOS_REDIRECT_URI` for the production frontend origin in Netlify
-(step 2 below).
+(`npx convex env set <VAR> <value> --prod`), and add
+`VITE_CLERK_PUBLISHABLE_KEY` for the production Clerk app in Netlify
+(step 2 below). Use the production Clerk Frontend API URL for
+`CLERK_JWT_ISSUER_DOMAIN`.
 
 ### 2. Deploy frontend to Netlify
 
@@ -108,12 +114,8 @@ Connect the repo in the [Netlify dashboard](https://app.netlify.com). Add the fo
 | Variable | Value |
 |---|---|
 | `VITE_CONVEX_URL` | Your Convex production URL (e.g. `https://xxxx.convex.cloud`) |
-| `VITE_WORKOS_CLIENT_ID` | Your production WorkOS client ID |
-| `VITE_WORKOS_REDIRECT_URI` | Your production frontend redirect URI |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Your production Clerk publishable key |
 | `CONVEX_DEPLOY_KEY` | Found in Convex dashboard → Settings → Deploy key |
-
-This app keeps AuthKit's client-side `devMode` enabled in production so the
-free WorkOS setup works without a paid custom Authentication API domain.
 
 The `netlify.toml` at the repo root handles the build command, publish directory, and SPA redirects automatically.
 
@@ -133,7 +135,7 @@ src/
 
 ## Auth
 
-Sign-in uses WorkOS AuthKit (see [First-time deployment
+Sign-in uses Clerk (see [First-time deployment
 setup](#first-time-deployment-setup) above). The dashboard (`/`), kiosk
 (`/clock`), `/members`, and `/users` all require a signed-in mentor. A mentor
 signs in once on the kiosk browser to unlock the shared clock screen for team
@@ -141,9 +143,9 @@ members.
 
 New accounts can only be created by an already-authenticated mentor, via
 **Invite User** on the **Manage Users** page (`/users`) — there is no public
-sign-up flow. Inviting sends a WorkOS invitation to the given email with the
+sign-up flow. Inviting sends a Clerk invitation to the given email with the
 chosen role (`student` or `mentor`); the `teamMembers` roster row is created
-automatically once the invite is accepted, synced from a WorkOS webhook (see
+automatically once the invite is accepted, synced from a Clerk webhook (see
 `convex/auth.ts`).
 
 ## Reporting Ranges and Exports

@@ -4,17 +4,18 @@ import type { QueryCtx, MutationCtx } from "./_generated/server"
 type Ctx = QueryCtx | MutationCtx
 
 /**
- * Resolve the teamMembers row for the currently authenticated WorkOS identity,
+ * Resolve the teamMembers row for the currently authenticated Clerk identity,
  * or `null` if unauthenticated / not yet synced by the webhook.
  *
- * The WorkOS user id is the JWT `subject`, which matches `teamMembers.workosUserId`.
+ * Clerk's JWT `subject` is the Clerk user id, which matches
+ * `teamMembers.clerkUserId` from Clerk `user.*` webhook payloads.
  */
 export async function getCurrentMember(ctx: Ctx): Promise<Doc<"teamMembers"> | null> {
   const identity = await ctx.auth.getUserIdentity()
   if (!identity) return null
   return ctx.db
     .query("teamMembers")
-    .withIndex("by_workosUserId", (q) => q.eq("workosUserId", identity.subject))
+    .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject))
     .unique()
 }
 
