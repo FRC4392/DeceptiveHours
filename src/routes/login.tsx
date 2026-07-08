@@ -1,6 +1,5 @@
 import { Navigate } from "react-router"
-import { SignIn } from "@clerk/react"
-import { Authenticated, AuthLoading, Unauthenticated } from "convex/react"
+import { SignIn, useUser } from "@clerk/react"
 import logo from "@/assets/logo.png"
 
 function SignInCard() {
@@ -30,23 +29,20 @@ function SignInCard() {
   )
 }
 
-// Login itself is Clerk-only. These Convex boundaries confirm that the Clerk
-// token has reached Convex before routing, which avoids a fast redirect
-// ping-pong with MentorLayout while auth state settles.
+// Login itself is Clerk-only. Convex only verifies Clerk JWTs after sign-in so
+// backend functions can authorize the signed-in user.
 export default function LoginPage() {
-  return (
-    <>
-      <AuthLoading>
-        <div className="flex min-h-svh items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
-      </AuthLoading>
-      <Authenticated>
-        <Navigate to="/" replace />
-      </Authenticated>
-      <Unauthenticated>
-        <SignInCard />
-      </Unauthenticated>
-    </>
-  )
+  const { isLoaded, isSignedIn } = useUser()
+
+  if (!isLoaded) {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (isSignedIn) return <Navigate to="/" replace />
+
+  return <SignInCard />
 }
