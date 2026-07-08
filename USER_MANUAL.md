@@ -143,9 +143,12 @@ Grades advance automatically on July 1 each year. A student listed as grade 12 b
 
 ### Removing a Member
 
-1. Click the **trash icon** next to the member's name.
-2. A confirmation dialog will warn you that all of the member's clock-in sessions will also be permanently deleted.
-3. Click **Remove** to confirm.
+Members are removed from **Manage Users** (`/users`), not directly from the roster table.
+
+1. Open **Manage Users** (`/users`).
+2. Click the **trash icon** in the member's row.
+3. A confirmation dialog will warn you that the Clerk account, roster record, and clock-in sessions will be permanently deleted.
+4. Click **Remove** to confirm.
 
 > This action cannot be undone.
 
@@ -161,7 +164,7 @@ The card at the top shows the member's name, ID, type, and student info when app
 
 ### QR Code
 
-Click **Show QR Code** to display a scannable QR code containing the member's ID. This can be screenshotted or printed and given to the member to use at the kiosk.
+Click **QR Code** to display a scannable QR code containing the member's ID. This can be screenshotted or printed and given to the member to use at the kiosk.
 
 ### Hours Range Stats
 
@@ -207,9 +210,11 @@ Only a currently signed-in mentor can invite new accounts — there is no public
 2. In the left sidebar, click **Manage Users**.
 3. Click **Invite User** in the top-right corner.
 4. Enter the person's **email address** and choose their **Role** (Student or Mentor).
-5. Click **Invite User** to send the invitation.
+5. Click **Send Invitation** to send the invitation.
 
 The invited person receives an email from Clerk to accept the invitation and set their own password. Once accepted, they appear automatically in the Team Members roster with the role you selected — no manual account creation step is needed.
+
+To remove a user, click the **trash icon** in their row and confirm. The app prevents you from removing the signed-in account you are currently using.
 
 > Passwords are managed entirely by Clerk, not by this app. If someone needs a password reset, they can use the "forgot password" option on the Clerk sign-in page — mentors can't reset passwords on a user's behalf from within DeceptiveHours.
 

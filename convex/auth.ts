@@ -22,7 +22,23 @@ async function generateMemberId(ctx: MutationCtx): Promise<string> {
   throw new Error("Failed to generate a unique memberId")
 }
 
+function clerkAuthTokenIdentifier(clerkUserId: string): string | undefined {
+  const issuer = process.env.CLERK_JWT_ISSUER_DOMAIN
+  return issuer ? `${issuer}|${clerkUserId}` : undefined
+}
+
 async function findMember(ctx: MutationCtx, clerkUserId: string) {
+  const authTokenIdentifier = clerkAuthTokenIdentifier(clerkUserId)
+  if (authTokenIdentifier) {
+    const member = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_authTokenIdentifier", (q) =>
+        q.eq("authTokenIdentifier", authTokenIdentifier),
+      )
+      .unique()
+    if (member) return member
+  }
+
   return ctx.db
     .query("teamMembers")
     .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", clerkUserId))
@@ -54,12 +70,20 @@ export const upsertClerkUser = internalMutation({
   returns: v.null(),
   handler: async (ctx, data) => {
     const existing = await findMember(ctx, data.clerkUserId)
-    const fields = {
+    const fields: {
+      email: string
+      firstName: string
+      lastName: string
+      type: "student" | "mentor"
+      authTokenIdentifier?: string
+    } = {
       email: data.email,
       firstName: data.firstName,
       lastName: data.lastName,
       type: data.role,
     }
+    const authTokenIdentifier = clerkAuthTokenIdentifier(data.clerkUserId)
+    if (authTokenIdentifier) fields.authTokenIdentifier = authTokenIdentifier
 
     if (existing) {
       await ctx.db.patch(existing._id, fields)

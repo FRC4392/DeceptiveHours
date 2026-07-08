@@ -7,12 +7,21 @@ type Ctx = QueryCtx | MutationCtx
  * Resolve the teamMembers row for the currently authenticated Clerk identity,
  * or `null` if unauthenticated / not yet synced by the webhook.
  *
- * Clerk's JWT `subject` is the Clerk user id, which matches
- * `teamMembers.clerkUserId` from Clerk `user.*` webhook payloads.
+ * Prefer Convex's provider-scoped `tokenIdentifier` for auth-linked lookups.
+ * The `subject` fallback supports Clerk rows created before
+ * `authTokenIdentifier` was stored.
  */
 export async function getCurrentMember(ctx: Ctx): Promise<Doc<"teamMembers"> | null> {
   const identity = await ctx.auth.getUserIdentity()
   if (!identity) return null
+  const byToken = await ctx.db
+    .query("teamMembers")
+    .withIndex("by_authTokenIdentifier", (q) =>
+      q.eq("authTokenIdentifier", identity.tokenIdentifier),
+    )
+    .unique()
+  if (byToken) return byToken
+
   return ctx.db
     .query("teamMembers")
     .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", identity.subject))

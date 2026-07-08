@@ -6,9 +6,15 @@ import { api, internal } from "./_generated/api"
 import schema from "./schema"
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"])
+const CLERK_ISSUER = "https://clerk.example"
 
 function setup() {
+  process.env.CLERK_JWT_ISSUER_DOMAIN = CLERK_ISSUER
   return convexTest(schema, modules)
+}
+
+function clerkIdentity(subject: string) {
+  return { issuer: CLERK_ISSUER, subject }
 }
 
 function signedWebhook(body: string) {
@@ -36,7 +42,7 @@ describe("Clerk auth sync", () => {
   test("users.me is null before webhook sync and returns profile after sync", async () => {
     const t = setup()
 
-    await expect(t.withIdentity({ subject: "user_mentor" }).query(api.users.me)).resolves.toBeNull()
+    await expect(t.withIdentity(clerkIdentity("user_mentor")).query(api.users.me)).resolves.toBeNull()
 
     await t.mutation(internal.auth.upsertClerkUser, {
       clerkUserId: "user_mentor",
@@ -46,11 +52,61 @@ describe("Clerk auth sync", () => {
       role: "mentor",
     })
 
-    await expect(t.withIdentity({ subject: "user_mentor" }).query(api.users.me)).resolves.toEqual({
+    await expect(t.withIdentity(clerkIdentity("user_mentor")).query(api.users.me)).resolves.toEqual({
       role: "mentor",
       firstName: "Mira",
       lastName: "Mentor",
       email: "mentor@example.com",
+    })
+    await expect(t.run(async (ctx) => {
+      return await ctx.db
+        .query("teamMembers")
+        .withIndex("by_authTokenIdentifier", (q) =>
+          q.eq("authTokenIdentifier", `${CLERK_ISSUER}|user_mentor`),
+        )
+        .unique()
+    })).resolves.toMatchObject({
+      clerkUserId: "user_mentor",
+      authTokenIdentifier: `${CLERK_ISSUER}|user_mentor`,
+    })
+  })
+
+  test("users.me prefers tokenIdentifier and falls back for legacy Clerk rows", async () => {
+    const t = setup()
+
+    await t.mutation(internal.auth.upsertClerkUser, {
+      clerkUserId: "user_token",
+      email: "token@example.com",
+      firstName: "Token",
+      lastName: "Member",
+      role: "mentor",
+    })
+    await expect(
+      t.withIdentity({
+        issuer: CLERK_ISSUER,
+        subject: "different-subject",
+        tokenIdentifier: `${CLERK_ISSUER}|user_token`,
+      }).query(api.users.me),
+    ).resolves.toMatchObject({
+      role: "mentor",
+      email: "token@example.com",
+    })
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("teamMembers", {
+        clerkUserId: "legacy-user",
+        email: "legacy@example.com",
+        firstName: "Legacy",
+        lastName: "Mentor",
+        memberId: "4392999999",
+        type: "mentor",
+      })
+    })
+    await expect(t.withIdentity(clerkIdentity("legacy-user")).query(api.users.me)).resolves.toEqual({
+      role: "mentor",
+      firstName: "Legacy",
+      lastName: "Mentor",
+      email: "legacy@example.com",
     })
   })
 
@@ -70,7 +126,7 @@ describe("Clerk auth sync", () => {
 
     const created = await t.fetch("/clerk/webhook", signedWebhook(createdBody))
     expect(created.status).toBe(200)
-    await expect(t.withIdentity({ subject: "user_student" }).query(api.users.me)).resolves.toEqual({
+    await expect(t.withIdentity(clerkIdentity("user_student")).query(api.users.me)).resolves.toEqual({
       role: "student",
       firstName: "Sam",
       lastName: "Student",
@@ -105,7 +161,7 @@ describe("Clerk auth sync", () => {
     })
     const updated = await t.fetch("/clerk/webhook", signedWebhook(updatedBody))
     expect(updated.status).toBe(200)
-    await expect(t.withIdentity({ subject: "user_student" }).query(api.users.me)).resolves.toMatchObject({
+    await expect(t.withIdentity(clerkIdentity("user_student")).query(api.users.me)).resolves.toMatchObject({
       role: "mentor",
       firstName: "Mira",
       lastName: "Mentor",

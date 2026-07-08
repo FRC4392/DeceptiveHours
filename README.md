@@ -51,8 +51,10 @@ deployment needs Clerk configured before anyone can sign in:
    `https://dashboard.clerk.com/apps/setup/convex`, then copy the Clerk
    Frontend API URL.
 3. Create a Clerk webhook endpoint for the Convex HTTP endpoint
-   `/clerk/webhook`, subscribe it to `user.created`, `user.updated`, and
-   `user.deleted`, then copy the webhook signing secret.
+   `https://<deployment-name>.convex.site/clerk/webhook`, subscribe it to
+   `user.created`, `user.updated`, and `user.deleted`, then copy the webhook
+   signing secret. Use the `.convex.site` URL for webhooks, not the
+   `.convex.cloud` client URL.
 4. Set the server-side Clerk env vars on the Convex deployment:
    ```bash
    npx convex env set CLERK_JWT_ISSUER_DOMAIN <clerk-frontend-api-url>
@@ -76,6 +78,11 @@ deployment needs Clerk configured before anyone can sign in:
    automatically from the Clerk webhook (`convex/auth.ts`), with its type
    synced from `publicMetadata.role`.
 
+Existing Clerk-synced rows without an `authTokenIdentifier` still work through
+a legacy Clerk user ID fallback. A future Clerk `user.updated` webhook, or the
+paginated `migrations:backfillClerkAuthTokenIdentifiers` mutation, fills the
+provider-scoped identifier used by new rows.
+
 ### Development
 
 ```bash
@@ -83,6 +90,8 @@ bun run dev:all
 ```
 
 This starts both the Vite dev server and the Convex function watcher concurrently.
+The included `setup.sh` helper wraps `bun install` plus `bun run dev:all`; use
+`./setup.sh --install-only` when you only want dependencies installed.
 
 | URL | Description |
 |---|---|
@@ -94,30 +103,66 @@ This starts both the Vite dev server and the Convex function watcher concurrentl
 
 ## Deployment
 
-### 1. Deploy Convex to production
+Git pushes to the production branch trigger Netlify. The production Netlify
+build also deploys Convex functions because `netlify.toml` runs
+`npx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'bun run build'`.
+That means normal code, schema, and Convex function changes go to production
+automatically once Netlify has the right Convex deploy key.
+
+### One-time production setup
+
+1. Create or identify the Convex production deployment in the Convex dashboard.
+2. Generate a production deploy key with `deployment:deploy` permission and add
+   it to Netlify as `CONVEX_DEPLOY_KEY`.
+3. Add `VITE_CLERK_PUBLISHABLE_KEY` in Netlify for the production Clerk app.
+   `VITE_CONVEX_URL` is injected during the build by `npx convex deploy`, but
+   if you also set it in Netlify, it must point at the same production
+   `.convex.cloud` URL.
+4. Set the Clerk server env vars on the Convex production deployment:
+   ```bash
+   npx convex env set CLERK_JWT_ISSUER_DOMAIN <production-clerk-frontend-api-url> --prod
+   npx convex env set CLERK_SECRET_KEY <production-clerk-secret-key> --prod
+   npx convex env set CLERK_WEBHOOK_SECRET <production-clerk-webhook-signing-secret> --prod
+   ```
+5. In Clerk, allow the production Netlify URL or custom domain in the app's
+   sign-in/redirect settings.
+6. In Clerk, configure the webhook destination as
+   `https://<deployment-name>.convex.site/clerk/webhook`.
+7. Create the first mentor in Clerk and set their `publicMetadata.role` to
+   `"mentor"` before trying to use in-app invites.
+
+### Ongoing deploys
+
+After the one-time setup, merging to the production branch is enough for normal
+deploys:
+
+- Netlify runs the production build.
+- `npx convex deploy` deploys Convex code/schema and provides
+  `VITE_CONVEX_URL` to `bun run build`.
+- Netlify publishes the `dist` frontend.
+
+Manual production deploys are still possible with:
 
 ```bash
-bunx convex deploy
+bunx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd "bun run build"
 ```
 
-Repeat the Clerk env vars from [First-time deployment
-setup](#first-time-deployment-setup) against the production deployment
-(`npx convex env set <VAR> <value> --prod`), and add
-`VITE_CLERK_PUBLISHABLE_KEY` for the production Clerk app in Netlify
-(step 2 below). Use the production Clerk Frontend API URL for
-`CLERK_JWT_ISSUER_DOMAIN`.
+Manual production actions may still be needed for operational changes that are
+not just code deploys, such as setting Convex env vars, changing Clerk webhook
+settings, creating the first mentor, or running a one-off migration/backfill.
+For example, after introducing `authTokenIdentifier`, existing Clerk rows can be
+backfilled from the Convex dashboard or with:
 
-### 2. Deploy frontend to Netlify
+```bash
+npx convex run --prod --identity '{"issuer":"<production-clerk-frontend-api-url>","subject":"<mentor-clerk-user-id>"}' migrations:backfillClerkAuthTokenIdentifiers '{"paginationOpts":{"numItems":100,"cursor":null},"dryRun":true}'
+npx convex run --prod --identity '{"issuer":"<production-clerk-frontend-api-url>","subject":"<mentor-clerk-user-id>"}' migrations:backfillClerkAuthTokenIdentifiers '{"paginationOpts":{"numItems":100,"cursor":null},"dryRun":false}'
+```
 
-Connect the repo in the [Netlify dashboard](https://app.netlify.com). Add the following environment variables under **Site configuration → Environment variables**:
-
-| Variable | Value |
-|---|---|
-| `VITE_CONVEX_URL` | Your Convex production URL (e.g. `https://xxxx.convex.cloud`) |
-| `VITE_CLERK_PUBLISHABLE_KEY` | Your production Clerk publishable key |
-| `CONVEX_DEPLOY_KEY` | Found in Convex dashboard → Settings → Deploy key |
-
-The `netlify.toml` at the repo root handles the build command, publish directory, and SPA redirects automatically.
+Repeat the command with the returned `continueCursor` in place of `null` until
+`isDone` is `true`.
+Deploy previews currently run `bun run build` only, so they do not create Convex
+preview deployments unless Netlify and `netlify.toml` are changed to use Convex
+preview deploys.
 
 ## Project Structure
 
@@ -140,6 +185,11 @@ setup](#first-time-deployment-setup) above). The dashboard (`/`), kiosk
 (`/clock`), `/members`, and `/users` all require a signed-in mentor. A mentor
 signs in once on the kiosk browser to unlock the shared clock screen for team
 members.
+
+Clerk is the source of truth for login, passwords, invitations, and account
+recovery. `convex/auth.config.ts` is only the Convex JWT bridge that lets Convex
+verify Clerk tokens and make `ctx.auth.getUserIdentity()` work; this app does
+not use the legacy Convex Auth password sign-in flow.
 
 New accounts can only be created by an already-authenticated mentor, via
 **Invite User** on the **Manage Users** page (`/users`) — there is no public

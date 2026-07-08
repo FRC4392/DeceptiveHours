@@ -29,6 +29,8 @@ function SignInCard() {
   )
 }
 
+// Login itself is Clerk-only. Convex only verifies Clerk JWTs after sign-in so
+// backend functions can authorize the signed-in user.
 export default function LoginPage() {
   const { isLoaded, isSignedIn } = useUser()
 
@@ -42,7 +44,5 @@ export default function LoginPage() {
 
   if (isSignedIn) return <Navigate to="/" replace />
 
-  return (
-    <SignInCard />
-  )
+  return <SignInCard />
 }

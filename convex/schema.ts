@@ -4,6 +4,7 @@ import { v } from "convex/values"
 export default defineSchema({
   teamMembers: defineTable({
     clerkUserId: v.optional(v.string()),
+    authTokenIdentifier: v.optional(v.string()),
     workosUserId: v.optional(v.string()),
     email: v.string(),
     firstName: v.string(),
@@ -26,7 +27,8 @@ export default defineSchema({
     studentGradeAsOfSchoolYear: v.optional(v.number()),
   })
     .index("by_memberId", ["memberId"])
-    .index("by_clerkUserId", ["clerkUserId"]),
+    .index("by_clerkUserId", ["clerkUserId"])
+    .index("by_authTokenIdentifier", ["authTokenIdentifier"]),
 
   appSettings: defineTable({
     key: v.string(),
