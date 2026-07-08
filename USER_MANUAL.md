@@ -56,13 +56,13 @@ If your Member ID is not found, an error message will appear and the kiosk will 
 
 ## 2. Mentor Sign-In
 
-Mentors access the protected dashboard at `/login`.
+Mentors sign in on the protected sign-in screen at `/login`.
 
-1. Click **Sign in with Clerk**.
-2. You'll be taken to a Clerk sign-in page — enter your credentials there.
-3. You'll be redirected back to the Dashboard automatically.
+1. Enter your email and password in the sign-in form on the page.
+2. Complete any extra verification Clerk prompts for (for example a one-time code or a multi-factor step, if your organization requires it).
+3. You'll be taken to the Dashboard automatically once sign-in succeeds.
 
-> Passwords and account recovery are managed by Clerk, not by this app. If you're stuck signing in, use the "forgot password" option on the Clerk sign-in page, or reach out to whoever manages the team's Clerk organization.
+> The sign-in form is provided by Clerk and embedded directly in the page — there's no separate site to visit. Passwords and account recovery are managed by Clerk, not by this app. If you're stuck signing in, use the "forgot password" option in the sign-in form, or reach out to whoever manages the team's Clerk organization.
 
 There is no public sign-up — accounts are created by existing mentors only (see [Section 6](#6-managing-users)).
 
