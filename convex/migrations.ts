@@ -3,6 +3,12 @@ import { v } from "convex/values"
 import { mutation } from "./_generated/server"
 import { requireMentor } from "./authz"
 
+function clerkAuthTokenIdentifier(clerkUserId: string): string {
+  const issuer = process.env.CLERK_JWT_ISSUER_DOMAIN
+  if (!issuer) throw new Error("CLERK_JWT_ISSUER_DOMAIN must be set")
+  return `${issuer}|${clerkUserId}`
+}
+
 export const backfillClockSessionStatus = mutation({
   args: {
     paginationOpts: paginationOptsValidator,
@@ -27,6 +33,42 @@ export const backfillClockSessionStatus = mutation({
         await ctx.db.patch(session._id, {
           status: session.clockOut === undefined ? "open" : "closed",
         })
+      }
+    }
+
+    return {
+      patched,
+      scanned: page.page.length,
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
+    }
+  },
+})
+
+export const backfillClerkAuthTokenIdentifiers = mutation({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    dryRun: v.optional(v.boolean()),
+  },
+  returns: v.object({
+    patched: v.number(),
+    scanned: v.number(),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
+  handler: async (ctx, { paginationOpts, dryRun }) => {
+    await requireMentor(ctx)
+
+    const page = await ctx.db.query("teamMembers").paginate(paginationOpts)
+    let patched = 0
+
+    for (const member of page.page) {
+      if (!member.clerkUserId) continue
+      const authTokenIdentifier = clerkAuthTokenIdentifier(member.clerkUserId)
+      if (member.authTokenIdentifier === authTokenIdentifier) continue
+      patched += 1
+      if (!dryRun) {
+        await ctx.db.patch(member._id, { authTokenIdentifier })
       }
     }
 

@@ -30,10 +30,9 @@ function SignInCard() {
   )
 }
 
-// Auth state is read purely from Convex's own confirmation (via the
-// Authenticated/Unauthenticated/AuthLoading boundaries), not Clerk's raw
-// client-side state — mixing the two caused a fast redirect ping-pong with
-// MentorLayout, since the two sources resolve on different timelines.
+// Login itself is Clerk-only. These Convex boundaries confirm that the Clerk
+// token has reached Convex before routing, which avoids a fast redirect
+// ping-pong with MentorLayout while auth state settles.
 export default function LoginPage() {
   return (
     <>

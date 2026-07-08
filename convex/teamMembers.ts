@@ -11,6 +11,7 @@ import {
 
 const teamMemberFields = {
   clerkUserId: v.string(),
+  authTokenIdentifier: v.optional(v.string()),
   email: v.string(),
   firstName: v.string(),
   lastName: v.string(),
@@ -29,7 +30,7 @@ const teamMemberDoc = v.object({
 })
 
 // Shape returned by the two public (unauthenticated) lookups below.
-// Deliberately excludes `email` and `clerkUserId` — those queries are
+// Deliberately excludes `email`, `clerkUserId`, and `authTokenIdentifier` — those queries are
 // reachable by anyone who can guess a memberId, so PII and internal Clerk
 // identifiers must not ride along in the response even though the current
 // UI doesn't render them.
