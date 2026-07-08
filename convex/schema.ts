@@ -5,7 +5,6 @@ export default defineSchema({
   teamMembers: defineTable({
     clerkUserId: v.optional(v.string()),
     authTokenIdentifier: v.optional(v.string()),
-    workosUserId: v.optional(v.string()),
     email: v.string(),
     firstName: v.string(),
     lastName: v.string(),
