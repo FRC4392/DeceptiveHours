@@ -1,6 +1,5 @@
 import { Navigate } from "react-router"
-import { SignIn } from "@clerk/react"
-import { Authenticated, AuthLoading, Unauthenticated } from "convex/react"
+import { SignIn, useUser } from "@clerk/react"
 import logo from "@/assets/logo.png"
 
 function SignInCard() {
@@ -30,24 +29,20 @@ function SignInCard() {
   )
 }
 
-// Auth state is read purely from Convex's own confirmation (via the
-// Authenticated/Unauthenticated/AuthLoading boundaries), not Clerk's raw
-// client-side state — mixing the two caused a fast redirect ping-pong with
-// MentorLayout, since the two sources resolve on different timelines.
 export default function LoginPage() {
+  const { isLoaded, isSignedIn } = useUser()
+
+  if (!isLoaded) {
+    return (
+      <div className="flex min-h-svh items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    )
+  }
+
+  if (isSignedIn) return <Navigate to="/" replace />
+
   return (
-    <>
-      <AuthLoading>
-        <div className="flex min-h-svh items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-        </div>
-      </AuthLoading>
-      <Authenticated>
-        <Navigate to="/" replace />
-      </Authenticated>
-      <Unauthenticated>
-        <SignInCard />
-      </Unauthenticated>
-    </>
+    <SignInCard />
   )
 }
