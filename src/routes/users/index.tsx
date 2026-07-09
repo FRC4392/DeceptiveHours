@@ -39,7 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Mail, Trash2, UserPlus } from "lucide-react"
+import { Mail, RefreshCw, Trash2, UserPlus } from "lucide-react"
 import { toast } from "sonner"
 
 type Role = "student" | "mentor"
@@ -53,11 +53,13 @@ export default function UsersPage() {
   const members = useQuery(api.teamMembers.list)
   const inviteUser = useAction(api.clerk.inviteUser)
   const removeUser = useAction(api.clerk.removeUser)
+  const syncUsers = useAction(api.clerk.syncUsers)
 
   const [inviteOpen, setInviteOpen] = useState(false)
   const [email, setEmail] = useState("")
   const [role, setRole] = useState<Role>("student")
   const [inviting, setInviting] = useState(false)
+  const [syncing, setSyncing] = useState(false)
 
   const [removeTarget, setRemoveTarget] = useState<RemoveTarget | null>(null)
   const [removing, setRemoving] = useState(false)
@@ -94,21 +96,41 @@ export default function UsersPage() {
     }
   }
 
+  async function handleSyncUsers() {
+    setSyncing(true)
+    try {
+      const result = await syncUsers({})
+      toast.success(
+        `Synced ${result.scanned} Clerk users: ${result.created} created, ${result.updated} updated, ${result.deleted} removed`,
+      )
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to sync Clerk users")
+    } finally {
+      setSyncing(false)
+    }
+  }
+
   const removeMember = members?.find((m) => m._id === removeTarget?.id)
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-heading text-2xl font-bold italic uppercase tracking-tight">Users</h1>
           <p className="text-muted-foreground">
-            Invite or remove Clerk accounts. The roster syncs automatically.
+            Invite or remove Clerk accounts. Use Sync Clerk if webhooks miss an update.
           </p>
         </div>
-        <Button onClick={() => setInviteOpen(true)} className="gap-2">
-          <UserPlus className="h-4 w-4" />
-          Invite User
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" onClick={handleSyncUsers} disabled={syncing} className="gap-2">
+            <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
+            {syncing ? "Syncing…" : "Sync Clerk"}
+          </Button>
+          <Button onClick={() => setInviteOpen(true)} className="gap-2">
+            <UserPlus className="h-4 w-4" />
+            Invite User
+          </Button>
+        </div>
       </div>
 
       <Card>

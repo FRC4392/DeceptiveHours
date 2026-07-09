@@ -181,4 +181,82 @@ describe("Clerk auth sync", () => {
       ),
     ).resolves.toEqual([])
   })
+
+  test("manual Clerk sync upserts current users and deletes missing local rows", async () => {
+    const t = setup()
+
+    await t.mutation(internal.auth.upsertClerkUser, {
+      clerkUserId: "user_keep",
+      email: "old@example.com",
+      firstName: "Old",
+      lastName: "Name",
+      role: "student",
+    })
+    await t.mutation(internal.auth.upsertClerkUser, {
+      clerkUserId: "user_missing",
+      email: "missing@example.com",
+      firstName: "Missing",
+      lastName: "Member",
+      role: "student",
+    })
+
+    const missingMemberId = await t.run(async (ctx) => {
+      const member = await ctx.db
+        .query("teamMembers")
+        .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", "user_missing"))
+        .unique()
+      if (!member) throw new Error("Missing seeded member")
+      await ctx.db.insert("clockSessions", {
+        teamMemberId: member._id,
+        clockIn: 1,
+        clockOut: 2,
+        status: "closed",
+      })
+      return member._id
+    })
+
+    await expect(
+      t.mutation(internal.auth.syncClerkUsers, {
+        requiredClerkUserId: "user_keep",
+        users: [
+          {
+            clerkUserId: "user_keep",
+            email: "new@example.com",
+            firstName: "New",
+            lastName: "Name",
+            role: "mentor",
+          },
+          {
+            clerkUserId: "user_new",
+            email: "created@example.com",
+            firstName: "Created",
+            lastName: "Member",
+            role: "student",
+          },
+        ],
+      }),
+    ).resolves.toEqual({ created: 1, updated: 1, deleted: 1 })
+
+    await expect(t.withIdentity(clerkIdentity("user_keep")).query(api.users.me)).resolves.toEqual({
+      role: "mentor",
+      firstName: "New",
+      lastName: "Name",
+      email: "new@example.com",
+    })
+    await expect(t.withIdentity(clerkIdentity("user_new")).query(api.users.me)).resolves.toEqual({
+      role: "student",
+      firstName: "Created",
+      lastName: "Member",
+      email: "created@example.com",
+    })
+    await expect(t.run((ctx) => ctx.db.get(missingMemberId))).resolves.toBeNull()
+    await expect(
+      t.run((ctx) =>
+        ctx.db
+          .query("clockSessions")
+          .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", missingMemberId))
+          .collect(),
+      ),
+    ).resolves.toEqual([])
+  })
 })

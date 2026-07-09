@@ -30,6 +30,10 @@ import { Clock, Download, RotateCcw, Save, Timer, Users, UserCheck } from "lucid
 import { toast } from "sonner"
 
 type HoursRange = { startAt: number; endAt?: number }
+type RoleBreakdown = {
+  mentors: number
+  students: number
+}
 
 export default function DashboardPage() {
   const [appliedRange, setAppliedRange] = useState<HoursRange | null>(null)
@@ -91,6 +95,31 @@ export default function DashboardPage() {
       ]),
     ])
   }
+
+  const memberCounts: RoleBreakdown = data.members.reduce(
+    (counts, member) => {
+      if (member.type === "mentor") counts.mentors += 1
+      else counts.students += 1
+      return counts
+    },
+    { mentors: 0, students: 0 },
+  )
+  const clockedInCounts: RoleBreakdown = data.currentlySignedIn.reduce(
+    (counts, member) => {
+      if (member.type === "mentor") counts.mentors += 1
+      else counts.students += 1
+      return counts
+    },
+    { mentors: 0, students: 0 },
+  )
+  const hourTotals = data.members.reduce(
+    (totals, member) => {
+      if (member.type === "mentor") totals.mentors += member.completedMs
+      else totals.students += member.completedMs
+      return totals
+    },
+    { mentors: 0, students: 0 },
+  )
 
   return (
     <div className="space-y-6">
@@ -174,6 +203,10 @@ export default function DashboardPage() {
             <p className="text-xs text-muted-foreground">
               of {data.members.length} members
             </p>
+            <StatBreakdown
+              mentors={clockedInCounts.mentors}
+              students={clockedInCounts.students}
+            />
           </CardContent>
         </Card>
 
@@ -189,6 +222,10 @@ export default function DashboardPage() {
               {formatTotalHours(data.totalCompletedMs)}
             </p>
             <p className="text-xs text-muted-foreground">completed hours in range</p>
+            <StatBreakdown
+              mentors={formatTotalHours(hourTotals.mentors)}
+              students={formatTotalHours(hourTotals.students)}
+            />
           </CardContent>
         </Card>
 
@@ -202,6 +239,10 @@ export default function DashboardPage() {
           <CardContent>
             <p className="font-heading text-3xl font-extrabold italic">{data.members.length}</p>
             <p className="text-xs text-muted-foreground">registered members</p>
+            <StatBreakdown
+              mentors={memberCounts.mentors}
+              students={memberCounts.students}
+            />
           </CardContent>
         </Card>
       </div>
@@ -288,6 +329,27 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function StatBreakdown({
+  mentors,
+  students,
+}: {
+  mentors: string | number
+  students: string | number
+}) {
+  return (
+    <dl className="mt-4 grid grid-cols-2 gap-2 border-t pt-3 text-xs">
+      <div>
+        <dt className="text-muted-foreground">Mentors</dt>
+        <dd className="font-mono font-semibold text-foreground">{mentors}</dd>
+      </div>
+      <div>
+        <dt className="text-muted-foreground">Students</dt>
+        <dd className="font-mono font-semibold text-foreground">{students}</dd>
+      </div>
+    </dl>
   )
 }
 
