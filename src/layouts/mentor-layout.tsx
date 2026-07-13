@@ -52,6 +52,13 @@ function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
       <Separator className="bg-white/10" />
       <div className="space-y-1 p-3">
         <div className="px-2">
+          <a 
+          href="https://apps.deceivers.org"
+          className="text-xs text-white/50 hover:text-white">
+          ← Deceivers Apps
+          </a>
+        </div>
+        <div className="px-2">
           <NavLink
             to="/clock"
             className="text-xs text-white/50 hover:text-white"
