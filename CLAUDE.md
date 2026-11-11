@@ -204,7 +204,11 @@ signing helper.
 ## Deployment notes
 
 Netlify builds from the production branch and runs `npx convex deploy … --cmd
-'bun run build'`, so schema and function changes ship with the frontend. Deploy
+'bun run build'`, so schema and function changes ship with the frontend. That
+command runs the Convex CLI under Netlify's Node, which `NODE_VERSION` in
+`netlify.toml` pins to 22 — Convex requires >= 22 and Vite 8 requires
+`^20.19 || >=22.12`. Bumping either dependency means re-checking that pin; a
+too-old Node fails the build before Vite is reached. Deploy
 previews run `bun run build` only — no Convex preview deployment. Convex env
 vars (`CLERK_JWT_ISSUER_DOMAIN`, `CLERK_SECRET_KEY`, `CLERK_WEBHOOK_SECRET`)
 and Clerk webhook config are manual, per-deployment steps. Webhooks point at
