@@ -31,6 +31,9 @@ Hour tracking app for Deceivers Robotics Team 4392. Members clock in and out via
 ### Prerequisites
 
 - [Bun](https://bun.sh) installed
+- Node 22 or newer — the Convex CLI requires it, and Vite 8 wants
+  `^20.19 || >=22.12`. Netlify pins this via `NODE_VERSION` in `netlify.toml`;
+  a Node 20 build fails at `convex deploy` before Vite runs.
 - A [Convex](https://dashboard.convex.dev) account
 
 ### Setup

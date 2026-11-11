@@ -3,7 +3,10 @@
   publish = "dist"
 
 [build.environment]
-  NODE_VERSION = "20"
+  # Convex >= 1.39 requires Node 22, and Vite 8 wants ^20.19 || >=22.12, so 22
+  # is the lowest version that satisfies both. Node 20 fails the build at
+  # `convex deploy` before Vite ever runs.
+  NODE_VERSION = "22"
 
 [context.deploy-preview]
   command = "bun run build"
