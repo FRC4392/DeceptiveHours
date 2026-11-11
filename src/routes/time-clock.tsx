@@ -11,6 +11,11 @@ import { useElapsedMs } from "@/hooks/use-elapsed-ms"
 import { LogIn, LogOut, QrCode, RotateCcw, Users } from "lucide-react"
 import logo from "@/assets/logo.png"
 import { toast } from "sonner"
+import { Spinner } from "@/components/spinner"
+import { initials } from "@/lib/student-info"
+import { MEMBER_ID_HINT, isMemberId } from "@convex/memberId"
+import { Label } from "@/components/ui/label"
+import { Link } from "react-router"
 
 type Phase =
   | { tag: "input" }
@@ -19,7 +24,10 @@ type Phase =
   | { tag: "member"; id: Id<"teamMembers"> }
   | { tag: "done"; action: "in" | "out" }
 
-export default function TimeClockPage() {
+// `kioskToken` is present only on the shared tablet. A mentor opening this
+// page from their phone passes nothing and is authorized by their Clerk
+// session instead.
+export default function TimeClockPage({ kioskToken }: { kioskToken?: string }) {
   const [phase, setPhase] = useState<Phase>({ tag: "input" })
   const [inputValue, setInputValue] = useState("")
   const inputRef = useRef<HTMLInputElement>(null)
@@ -30,15 +38,28 @@ export default function TimeClockPage() {
     }
   }, [phase.tag])
 
+  // Checking the shape before the lookup separates "that isn't a Member ID"
+  // from "no member has that ID" — a scanned QR code can contain anything, and
+  // a mistyped digit used to come back as a bare "Member not found".
   function submit(rawId: string) {
     const id = rawId.trim()
     if (!id) return
+    if (!isMemberId(id)) {
+      toast.error(MEMBER_ID_HINT)
+      return
+    }
     setPhase({ tag: "loading", lookupId: id })
   }
 
-  function handleScan(value: string) {
-    setInputValue(value)
-    submit(value)
+  function handleScan(value: string): boolean | void {
+    const scanned = value.trim()
+    if (!isMemberId(scanned)) {
+      toast.error("That QR code isn't a Member ID. Try again or type your ID.")
+      // Returning false keeps the camera scanning for the right code.
+      return false
+    }
+    setInputValue(scanned)
+    submit(scanned)
   }
 
   function reset() {
@@ -48,8 +69,20 @@ export default function TimeClockPage() {
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      <header className="flex items-center justify-center bg-primary px-6 py-3">
+      <header className="relative flex items-center justify-center bg-primary px-6 py-3">
         <img src={logo} alt="Deceivers Robotics Team 4392" className="h-12 w-auto" />
+        {/* Shown only to a mentor using this page from their own phone, so
+            they aren't stranded here. The shared tablet has no mentor session
+            to return to, and offering the link there would just bounce a
+            student to a sign-in page. */}
+        {!kioskToken && (
+          <Link
+            to="/"
+            className="absolute right-4 text-xs text-white/60 transition-colors hover:text-white"
+          >
+            Mentor dashboard →
+          </Link>
+        )}
       </header>
 
       <main className="flex flex-1 items-center justify-center p-4">
@@ -60,8 +93,9 @@ export default function TimeClockPage() {
                 <Users className="h-7 w-7 text-primary" />
               </div>
               <CardTitle className="text-2xl">Welcome</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Enter or scan your Member ID to clock in or out
+              <p id="kiosk-member-id-hint" className="text-sm text-muted-foreground">
+                Enter or scan your Member ID to clock in or out — 10 digits
+                starting with 4392
               </p>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -72,14 +106,24 @@ export default function TimeClockPage() {
                 }}
                 className="space-y-3"
               >
+                <Label htmlFor="kiosk-member-id" className="sr-only">
+                  Member ID
+                </Label>
                 <Input
+                  id="kiosk-member-id"
                   ref={inputRef}
                   placeholder="Member ID"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   className="h-12 text-center text-lg"
+                  // The kiosk runs on a tablet: ask for the numeric keypad
+                  // rather than the full alphabetic keyboard.
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={10}
                   autoComplete="off"
                   autoCorrect="off"
+                  aria-describedby="kiosk-member-id-hint"
                 />
                 <Button
                   type="submit"
@@ -118,6 +162,7 @@ export default function TimeClockPage() {
         {phase.tag === "loading" && (
           <MemberLookup
             memberId={phase.lookupId}
+            kioskToken={kioskToken}
             onFound={(id) => setPhase({ tag: "member", id })}
             onNotFound={() => {
               toast.error("Member not found. Please check your ID.")
@@ -129,6 +174,7 @@ export default function TimeClockPage() {
         {phase.tag === "member" && (
           <MemberCard
             memberId={phase.id}
+            kioskToken={kioskToken}
             onDone={(action) => setPhase({ tag: "done", action })}
             onBack={reset}
           />
@@ -144,14 +190,16 @@ export default function TimeClockPage() {
 
 function MemberLookup({
   memberId,
+  kioskToken,
   onFound,
   onNotFound,
 }: {
   memberId: string
+  kioskToken?: string
   onFound: (id: Id<"teamMembers">) => void
   onNotFound: () => void
 }) {
-  const member = useQuery(api.teamMembers.lookupByMemberId, { memberId })
+  const member = useQuery(api.teamMembers.lookupByMemberId, { memberId, kioskToken })
   const calledRef = useRef(false)
 
   useEffect(() => {
@@ -165,7 +213,7 @@ function MemberLookup({
     <Card className="w-full max-w-md">
       <CardContent className="flex items-center justify-center py-16">
         <div className="space-y-2 text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <Spinner className="mx-auto" />
           <p className="text-sm text-muted-foreground">Looking up member…</p>
         </div>
       </CardContent>
@@ -175,15 +223,20 @@ function MemberLookup({
 
 function MemberCard({
   memberId,
+  kioskToken,
   onDone,
   onBack,
 }: {
   memberId: Id<"teamMembers">
+  kioskToken?: string
   onDone: (action: "in" | "out") => void
   onBack: () => void
 }) {
-  const member = useQuery(api.teamMembers.getById, { id: memberId })
-  const status = useQuery(api.clockSessions.getMemberStatus, { teamMemberId: memberId })
+  const member = useQuery(api.teamMembers.getById, { id: memberId, kioskToken })
+  const status = useQuery(api.clockSessions.getMemberStatus, {
+    teamMemberId: memberId,
+    kioskToken,
+  })
   const clockIn = useMutation(api.clockSessions.clockIn)
   const clockOut = useMutation(api.clockSessions.clockOut)
   const [acting, setActing] = useState(false)
@@ -197,10 +250,10 @@ function MemberCard({
     setActing(true)
     try {
       if (isClockIn) {
-        await clockIn({ teamMemberId: memberId })
+        await clockIn({ teamMemberId: memberId, kioskToken })
         onDone("in")
       } else {
-        await clockOut({ teamMemberId: memberId })
+        await clockOut({ teamMemberId: memberId, kioskToken })
         onDone("out")
       }
     } catch (e) {
@@ -213,7 +266,7 @@ function MemberCard({
     return (
       <Card className="w-full max-w-md">
         <CardContent className="py-16 text-center">
-          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+          <Spinner className="mx-auto" />
         </CardContent>
       </Card>
     )
@@ -225,8 +278,7 @@ function MemberCard({
     <Card className="w-full max-w-md">
       <CardHeader className="border-b text-center">
         <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 text-2xl font-bold text-primary">
-          {member.firstName[0]}
-          {member.lastName[0]}
+          {initials(member.firstName, member.lastName)}
         </div>
         <CardTitle className="text-2xl">
           {member.firstName} {member.lastName}
@@ -286,19 +338,18 @@ function DoneCard({
 }) {
   const [countdown, setCountdown] = useState(5)
 
+  // The countdown and the reset are separate effects. Calling `onReset()` from
+  // inside the `setCountdown` updater ran a side effect during render, which
+  // React's StrictMode double-invokes in development.
   useEffect(() => {
-    const id = setInterval(() => {
-      setCountdown((c) => {
-        if (c <= 1) {
-          clearInterval(id)
-          onReset()
-          return 0
-        }
-        return c - 1
-      })
-    }, 1000)
+    const id = setInterval(() => setCountdown((c) => Math.max(0, c - 1)), 1000)
     return () => clearInterval(id)
-  }, [onReset])
+  }, [])
+
+  useEffect(() => {
+    if (countdown > 0) return
+    onReset()
+  }, [countdown, onReset])
 
   return (
     <Card className="w-full max-w-md text-center">

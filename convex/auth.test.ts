@@ -182,7 +182,7 @@ describe("Clerk auth sync", () => {
     ).resolves.toEqual([])
   })
 
-  test("manual Clerk sync upserts current users and deletes missing local rows", async () => {
+  test("manual Clerk sync upserts current users and prunes only when asked", async () => {
     const t = setup()
 
     await t.mutation(internal.auth.upsertClerkUser, {
@@ -215,27 +215,40 @@ describe("Clerk auth sync", () => {
       return member._id
     })
 
+    const clerkUsers = [
+      {
+        clerkUserId: "user_keep",
+        email: "new@example.com",
+        firstName: "New",
+        lastName: "Name",
+        role: "mentor" as const,
+      },
+      {
+        clerkUserId: "user_new",
+        email: "created@example.com",
+        firstName: "Created",
+        lastName: "Member",
+        role: "student" as const,
+      },
+    ]
+
+    // A plain sync upserts but never deletes — it only reports how many rows
+    // *could* be pruned, so the UI can ask before destroying anyone's hours.
     await expect(
       t.mutation(internal.auth.syncClerkUsers, {
         requiredClerkUserId: "user_keep",
-        users: [
-          {
-            clerkUserId: "user_keep",
-            email: "new@example.com",
-            firstName: "New",
-            lastName: "Name",
-            role: "mentor",
-          },
-          {
-            clerkUserId: "user_new",
-            email: "created@example.com",
-            firstName: "Created",
-            lastName: "Member",
-            role: "student",
-          },
-        ],
+        users: clerkUsers,
       }),
-    ).resolves.toEqual({ created: 1, updated: 1, deleted: 1 })
+    ).resolves.toEqual({ created: 1, updated: 1, deleted: 0, removable: 1 })
+    await expect(t.run((ctx) => ctx.db.get(missingMemberId))).resolves.not.toBeNull()
+
+    await expect(
+      t.mutation(internal.auth.syncClerkUsers, {
+        requiredClerkUserId: "user_keep",
+        users: clerkUsers,
+        removeMissing: true,
+      }),
+    ).resolves.toEqual({ created: 0, updated: 2, deleted: 1, removable: 1 })
 
     await expect(t.withIdentity(clerkIdentity("user_keep")).query(api.users.me)).resolves.toEqual({
       role: "mentor",

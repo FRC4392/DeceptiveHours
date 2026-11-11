@@ -4,7 +4,7 @@ import { UserButton } from "@clerk/react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { LayoutDashboard, Menu, UserCog, Users } from "lucide-react"
+import { LayoutDashboard, Menu, Tablet, UserCog, Users } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import logo from "@/assets/logo.png"
 import { MentorGate } from "./mentor-gate"
@@ -13,6 +13,7 @@ const navItems = [
   { to: "/", label: "Dashboard", icon: LayoutDashboard },
   { to: "/members", label: "Team Members", icon: Users },
   { to: "/users", label: "Manage Users", icon: UserCog },
+  { to: "/kiosks", label: "Kiosks", icon: Tablet },
 ]
 
 function NavItems({ onNavigate }: { onNavigate?: () => void }) {

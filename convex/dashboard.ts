@@ -1,10 +1,9 @@
 import { query } from "./_generated/server"
 import { v } from "convex/values"
 import { requireMentor } from "./authz"
-import type { Id } from "./_generated/dataModel"
-import type { QueryCtx } from "./_generated/server"
-import { completedMsForRange, resolveHoursRange, sessionStatus } from "./hours"
+import { completedMsForRange, openSessionFor, resolveHoursRange } from "./hours"
 import { computeDisplayGrade, displayGradeValidator, studentGradeValidator } from "./studentInfo"
+import { ROSTER_LIMIT } from "./limits"
 
 const clockSessionDoc = v.object({
   _id: v.id("clockSessions"),
@@ -32,23 +31,6 @@ const memberWithStats = v.object({
   currentSession: v.union(clockSessionDoc, v.null()),
 })
 
-async function openSessionFor(ctx: QueryCtx, teamMemberId: Id<"teamMembers">) {
-  const indexed = await ctx.db
-    .query("clockSessions")
-    .withIndex("by_teamMemberId_and_status", (q) =>
-      q.eq("teamMemberId", teamMemberId).eq("status", "open"),
-    )
-    .take(2)
-  if (indexed[0]) return indexed[0]
-
-  const recent = await ctx.db
-    .query("clockSessions")
-    .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", teamMemberId))
-    .order("desc")
-    .take(200)
-  return recent.find((s) => sessionStatus(s) === "open") ?? null
-}
-
 // Mentor-only: aggregate roster + hours for the authenticated dashboard.
 export const getDashboardData = query({
   args: {
@@ -68,7 +50,10 @@ export const getDashboardData = query({
     await requireMentor(ctx)
 
     const hoursRange = await resolveHoursRange(ctx, args)
-    const members = await ctx.db.query("teamMembers").take(500)
+    const members = await ctx.db.query("teamMembers").take(ROSTER_LIMIT)
+    if (members.length === ROSTER_LIMIT) {
+      throw new Error(`Roster exceeds ${ROSTER_LIMIT} members — pagination is required`)
+    }
     const membersWithStats = await Promise.all(members.map(async (member) => {
       const [currentSession, completedMs] = await Promise.all([
         openSessionFor(ctx, member._id),

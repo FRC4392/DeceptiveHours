@@ -1,9 +1,10 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test"
-import { describe, expect, test } from "vitest"
+import { describe, expect, test, vi } from "vitest"
 import { api } from "./_generated/api"
 import schema from "./schema"
-import { computeDisplayGrade } from "./studentInfo"
+import { computeDisplayGrade, currentSchoolYear } from "./studentInfo"
+import { SESSION_SCAN_LIMIT } from "./limits"
 
 const modules = import.meta.glob(["./**/*.ts", "!./**/*.test.ts"])
 type TestBackend = ReturnType<typeof convexTest>
@@ -164,7 +165,6 @@ describe("clock sessions", () => {
         firstName: "Sam",
         lastName: "Student",
         memberId: "123",
-        type: "student",
       }),
     ).rejects.toThrow("Member ID")
 
@@ -182,6 +182,240 @@ describe("clock sessions", () => {
     expect(result.patched).toBeGreaterThanOrEqual(1)
     const session = await t.run((ctx) => ctx.db.get(sessionId))
     expect(session?.status).toBe("closed")
+  })
+
+  test("overlap check finds an open session buried beyond the old 500-row window", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+
+    // Stale open session, then far more recent rows than the previous
+    // `.take(500)` overlap window could hold. The old code only inspected the
+    // newest 500 and so let a second open session through.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("clockSessions", {
+        teamMemberId: studentId,
+        clockIn: 1_000,
+        status: "open",
+      })
+      for (let i = 0; i < 520; i++) {
+        const clockIn = 10_000_000 + i * 10_000
+        await ctx.db.insert("clockSessions", {
+          teamMemberId: studentId,
+          clockIn,
+          clockOut: clockIn + 1_000,
+          status: "closed",
+        })
+      }
+    })
+
+    await expect(
+      mentor.mutation(api.clockSessions.addSession, {
+        teamMemberId: studentId,
+        clockIn: 900_000_000,
+      }),
+    ).rejects.toThrow("overlaps")
+    await expect(
+      mentor.mutation(api.clockSessions.clockIn, { teamMemberId: studentId }),
+    ).rejects.toThrow("Already clocked in")
+  })
+
+  test("overlap check still accepts a gap between existing sessions", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+
+    await mentor.mutation(api.clockSessions.addSession, {
+      teamMemberId: studentId,
+      clockIn: 1_000,
+      clockOut: 2_000,
+    })
+    await mentor.mutation(api.clockSessions.addSession, {
+      teamMemberId: studentId,
+      clockIn: 5_000,
+      clockOut: 6_000,
+    })
+    // Slots cleanly into the gap, and abuts without overlapping.
+    await mentor.mutation(api.clockSessions.addSession, {
+      teamMemberId: studentId,
+      clockIn: 2_000,
+      clockOut: 5_000,
+    })
+    await expect(
+      mentor.mutation(api.clockSessions.addSession, {
+        teamMemberId: studentId,
+        clockIn: 1_500,
+        clockOut: 5_500,
+      }),
+    ).rejects.toThrow("overlaps")
+
+    const sessions = await mentor.query(api.clockSessions.getForMember, {
+      teamMemberId: studentId,
+      startAt: 0,
+    })
+    expect(sessions).toHaveLength(3)
+  })
+
+  test("session reads past the scan limit throw instead of under-reporting", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+
+    await t.run(async (ctx) => {
+      for (let i = 0; i < SESSION_SCAN_LIMIT; i++) {
+        const clockIn = 1_000_000 + i * 10_000
+        await ctx.db.insert("clockSessions", {
+          teamMemberId: studentId,
+          clockIn,
+          clockOut: clockIn + 3_600_000,
+          status: "closed",
+        })
+      }
+    })
+
+    await expect(
+      mentor.query(api.clockSessions.getForMember, { teamMemberId: studentId, startAt: 0 }),
+    ).rejects.toThrow("narrow the reporting range")
+
+    // The kiosk and dashboard read through the configured range, so point it at
+    // the fixture rather than the Jan-1 default to exercise that path too.
+    await mentor.mutation(api.settings.updateHoursRange, { startAt: 1 })
+    await expect(
+      mentor.query(api.clockSessions.getMemberStatus, { teamMemberId: studentId }),
+    ).rejects.toThrow("narrow the reporting range")
+    await expect(mentor.query(api.dashboard.getDashboardData, {})).rejects.toThrow(
+      "narrow the reporting range",
+    )
+
+    // A range covering only part of the history stays under the limit, and the
+    // end bound is applied in the index rather than after the page is taken.
+    const narrowed = await mentor.query(api.clockSessions.getForMember, {
+      teamMemberId: studentId,
+      startAt: 1_000_000,
+      endAt: 1_000_000 + 10 * 10_000,
+    })
+    expect(narrowed).toHaveLength(10)
+  })
+
+  test("open-session lookup finds a legacy row with no status at any depth", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+
+    // Pre-rollout shape: no `status` at all. The old fallback only scanned the
+    // 200 newest rows, so this was invisible once enough history piled up.
+    await t.run(async (ctx) => {
+      await ctx.db.insert("clockSessions", { teamMemberId: studentId, clockIn: 1_000 })
+      for (let i = 0; i < 250; i++) {
+        const clockIn = 10_000_000 + i * 10_000
+        await ctx.db.insert("clockSessions", {
+          teamMemberId: studentId,
+          clockIn,
+          clockOut: clockIn + 1_000,
+        })
+      }
+    })
+
+    const status = await mentor.query(api.clockSessions.getMemberStatus, {
+      teamMemberId: studentId,
+    })
+    expect(status.currentSession?.clockIn).toBe(1_000)
+    await expect(
+      mentor.mutation(api.clockSessions.clockIn, { teamMemberId: studentId }),
+    ).rejects.toThrow("Already clocked in")
+  })
+
+  test("sessions cannot be dated in the future", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+    const hourFromNow = Date.now() + 3_600_000
+
+    await expect(
+      mentor.mutation(api.clockSessions.addSession, {
+        teamMemberId: studentId,
+        clockIn: hourFromNow,
+      }),
+    ).rejects.toThrow("Clock in cannot be in the future")
+    await expect(
+      mentor.mutation(api.clockSessions.addSession, {
+        teamMemberId: studentId,
+        clockIn: Date.now() - 1_000,
+        clockOut: hourFromNow,
+      }),
+    ).rejects.toThrow("Clock out cannot be in the future")
+  })
+
+  test("student start year and grade can be cleared", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+
+    await mentor.mutation(api.teamMembers.update, {
+      id: studentId,
+      firstName: "Sam",
+      lastName: "Student",
+      memberId: "4392000002",
+      studentStartYear: 2024,
+      studentGrade: 9,
+    })
+    expect(
+      (await mentor.query(api.teamMembers.getById, { id: studentId }))?.displayGrade,
+    ).toBe(9)
+
+    // Omitting both clears them; previously they could only ever be set.
+    await mentor.mutation(api.teamMembers.update, {
+      id: studentId,
+      firstName: "Sam",
+      lastName: "Student",
+      memberId: "4392000002",
+    })
+    const cleared = await mentor.query(api.teamMembers.getById, { id: studentId })
+    expect(cleared?.studentGrade).toBeUndefined()
+    expect(cleared?.studentStartYear).toBeUndefined()
+    expect(cleared?.displayGrade).toBeNull()
+  })
+
+  test("member update rejects blank names and out-of-range start years", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+    const base = {
+      id: studentId,
+      firstName: "Sam",
+      lastName: "Student",
+      memberId: "4392000002",
+    }
+
+    await expect(
+      mentor.mutation(api.teamMembers.update, { ...base, firstName: "   " }),
+    ).rejects.toThrow("name")
+    await expect(
+      mentor.mutation(api.teamMembers.update, { ...base, studentStartYear: 1899 }),
+    ).rejects.toThrow("Start year")
+    await expect(
+      mentor.mutation(api.teamMembers.update, { ...base, studentStartYear: 2024.5 }),
+    ).rejects.toThrow("Start year")
+  })
+
+  test("destructive roster reset requires a mentor identity", async () => {
+    const { t, mentor, student } = setup()
+    await seedRoster(t)
+    vi.stubEnv("ENABLE_DESTRUCTIVE_MIGRATIONS", "true")
+
+    // The confirmation string is published in the README, so the mentor gate is
+    // the only thing standing between an anonymous caller and the whole roster.
+    await expect(
+      t.mutation(api.migrations.clearWorkosEraRoster, {
+        confirmation: "DELETE_WORKOS_ROSTER",
+      }),
+    ).rejects.toThrow("Unauthorized")
+    await expect(
+      student.mutation(api.migrations.clearWorkosEraRoster, {
+        confirmation: "DELETE_WORKOS_ROSTER",
+      }),
+    ).rejects.toThrow("Forbidden")
+    await expect(
+      mentor.mutation(api.migrations.clearWorkosEraRoster, { confirmation: "nope" }),
+    ).rejects.toThrow("Invalid confirmation")
+
+    const result = await mentor.mutation(api.migrations.clearWorkosEraRoster, {
+      confirmation: "DELETE_WORKOS_ROSTER",
+    })
+    expect(result.deletedTeamMembers).toBe(2)
   })
 
   test("configured hours range drives dashboard, kiosk status, and member sessions", async () => {
@@ -253,6 +487,35 @@ describe("clock sessions", () => {
     ).toBe("alumni")
   })
 
+  test("re-saving a member with their displayed grade is grade-neutral", async () => {
+    const { t, mentor } = setup()
+    const { studentId } = await seedRoster(t)
+
+    // A grade stored two school years ago now displays two grades higher. The
+    // edit dialog seeds from the displayed grade, so writing it straight back
+    // with a refreshed as-of year must not move the student.
+    await t.run((ctx) =>
+      ctx.db.patch(studentId, {
+        studentGrade: 9,
+        studentGradeAsOfSchoolYear: currentSchoolYear() - 2,
+      }),
+    )
+    const before = await mentor.query(api.teamMembers.getById, { id: studentId })
+    expect(before?.displayGrade).toBe(11)
+
+    await mentor.mutation(api.teamMembers.update, {
+      id: studentId,
+      firstName: "Samantha",
+      lastName: "Student",
+      memberId: "4392000002",
+      studentGrade: before!.displayGrade as 11,
+      studentGradeAsOfSchoolYear: currentSchoolYear(),
+    })
+
+    const after = await mentor.query(api.teamMembers.getById, { id: studentId })
+    expect(after?.displayGrade).toBe(11)
+  })
+
   test("team member update stores student start year and grade metadata", async () => {
     const { t, mentor } = setup()
     const { studentId } = await seedRoster(t)
@@ -262,7 +525,6 @@ describe("clock sessions", () => {
       firstName: "Sam",
       lastName: "Student",
       memberId: "4392000002",
-      type: "student",
       studentStartYear: 2024,
       studentGrade: 9,
       studentGradeAsOfSchoolYear: 2026,

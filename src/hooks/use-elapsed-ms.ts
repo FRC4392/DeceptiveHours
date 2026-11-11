@@ -10,7 +10,9 @@ export function useElapsedMs(since: number | null): number {
     if (!since) {
       timeoutId = setTimeout(() => setMs(0), 0)
     } else {
-      const update = () => setMs(Date.now() - since)
+      // Clamped so a future `since` cannot subtract from the kiosk's displayed
+      // total, which adds this elapsed time to completed hours.
+      const update = () => setMs(Math.max(0, Date.now() - since))
       timeoutId = setTimeout(update, 0)
       intervalId = setInterval(update, 1000)
     }

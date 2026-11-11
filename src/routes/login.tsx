@@ -2,6 +2,7 @@ import { Navigate } from "react-router"
 import { SignIn, useUser } from "@clerk/react"
 import { useTheme } from "next-themes"
 import logo from "@/assets/logo.png"
+import { Spinner } from "@/components/spinner"
 
 // Clerk derives its internal chrome (inputs, focus rings, spinners, secondary
 // text) from these base tokens in JS, so they need concrete colors per theme.
@@ -80,7 +81,7 @@ export default function LoginPage() {
   if (!isLoaded) {
     return (
       <div className="flex min-h-svh items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <Spinner label="Loading sign-in" />
       </div>
     )
   }

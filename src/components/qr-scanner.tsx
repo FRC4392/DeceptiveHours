@@ -4,7 +4,12 @@ import { Button } from "@/components/ui/button"
 import { X, CameraOff } from "lucide-react"
 
 interface Props {
-  onScan: (value: string) => void
+  /**
+   * Called with each decoded QR payload. Return `false` to reject it and keep
+   * scanning — the kiosk uses this to ignore codes that aren't Member IDs
+   * instead of freezing on the first poster or sticker in view.
+   */
+  onScan: (value: string) => boolean | void
   onClose: () => void
 }
 
@@ -44,16 +49,23 @@ export function QrScanner({ onScan, onClose }: Props) {
       canvas.width = video.videoWidth
       canvas.height = video.videoHeight
       const ctx = canvas.getContext("2d", { willReadFrequently: true })
-      if (!ctx) return
+      if (!ctx) {
+        // Previously a bare `return`, which ended the scan loop for good and
+        // left the preview running with nothing reading it.
+        setError("Could not read from the camera on this device.")
+        return
+      }
       ctx.drawImage(video, 0, 0)
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height)
       const result = jsQR(imageData.data, imageData.width, imageData.height, {
         inversionAttempts: "dontInvert",
       })
       if (result && active) {
-        active = false
-        onScan(result.data)
-        return
+        // Keep scanning when the consumer rejects the payload.
+        if (onScan(result.data) !== false) {
+          active = false
+          return
+        }
       }
 
       rafId = requestAnimationFrame(tick)
@@ -90,6 +102,7 @@ export function QrScanner({ onScan, onClose }: Props) {
         variant="ghost"
         size="icon"
         className="absolute right-2 top-2 bg-black/40 text-white hover:bg-black/60"
+        aria-label="Close scanner"
         onClick={onClose}
       >
         <X className="h-4 w-4" />

@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/table"
 import { downloadCsv } from "@/lib/csv"
 import { formatStudentGrade, type StudentGrade } from "@/lib/student-info"
-import { ArrowUpDown, ChevronRight, Download, UserPlus } from "lucide-react"
+import { ArrowDown, ArrowUp, ArrowUpDown, ChevronRight, Download, UserPlus } from "lucide-react"
 
 type SortKey = "name" | "type" | "grade" | "memberId"
 type SortDirection = "asc" | "desc"
@@ -154,18 +154,32 @@ export default function MembersPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>
-                  <SortButton label="Name" onClick={() => toggleSort("name")} />
-                </TableHead>
-                <TableHead>
-                  <SortButton label="Type" onClick={() => toggleSort("type")} />
-                </TableHead>
-                <TableHead>
-                  <SortButton label="Grade" onClick={() => toggleSort("grade")} />
-                </TableHead>
-                <TableHead>
-                  <SortButton label="Member ID" onClick={() => toggleSort("memberId")} />
-                </TableHead>
+                {(
+                  [
+                    ["name", "Name"],
+                    ["type", "Type"],
+                    ["grade", "Grade"],
+                    ["memberId", "Member ID"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <TableHead
+                    key={key}
+                    aria-sort={
+                      sortKey === key
+                        ? sortDirection === "asc"
+                          ? "ascending"
+                          : "descending"
+                        : "none"
+                    }
+                  >
+                    <SortButton
+                      label={label}
+                      active={sortKey === key}
+                      direction={sortDirection}
+                      onClick={() => toggleSort(key)}
+                    />
+                  </TableHead>
+                ))}
                 <TableHead className="w-16 text-right">Details</TableHead>
               </TableRow>
             </TableHeader>
@@ -214,7 +228,12 @@ export default function MembersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <Link to={`/members/${member._id}`}>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8"
+                        aria-label={`Open ${member.firstName} ${member.lastName}'s details`}
+                      >
                         <ChevronRight className="h-4 w-4" />
                       </Button>
                     </Link>
@@ -234,11 +253,36 @@ function gradeSortValue(grade: StudentGrade | null | undefined): number {
   return grade ?? 0
 }
 
-function SortButton({ label, onClick }: { label: string; onClick: () => void }) {
+// Shows which column is sorted and in which direction. The icon used to be a
+// static up/down glyph on every header, so the active column and direction were
+// invisible; the sort state is also exposed to screen readers via `aria-sort`
+// on the enclosing `TableHead`.
+function SortButton({
+  label,
+  active,
+  direction,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  direction: SortDirection
+  onClick: () => void
+}) {
+  const Icon = !active ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown
   return (
-    <Button variant="ghost" size="sm" className="-ml-3 gap-1 px-2" onClick={onClick}>
+    <Button
+      variant="ghost"
+      size="sm"
+      className={`-ml-3 gap-1 px-2 ${active ? "text-foreground" : ""}`}
+      onClick={onClick}
+    >
       {label}
-      <ArrowUpDown className="h-3.5 w-3.5" />
+      <Icon className={`h-3.5 w-3.5 ${active ? "" : "opacity-50"}`} />
+      <span className="sr-only">
+        {active
+          ? `sorted ${direction === "asc" ? "ascending" : "descending"}, activate to reverse`
+          : "activate to sort by this column"}
+      </span>
     </Button>
   )
 }

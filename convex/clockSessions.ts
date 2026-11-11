@@ -2,13 +2,15 @@ import { mutation, query } from "./_generated/server"
 import type { QueryCtx, MutationCtx } from "./_generated/server"
 import type { Id } from "./_generated/dataModel"
 import { v } from "convex/values"
-import { requireMentor } from "./authz"
+import { requireKioskOrMentor, requireMentor } from "./authz"
+import type { Caller } from "./authz"
 import {
   completedMsForRange,
   getConfiguredHoursRange,
-  sessionStatus,
+  openSessionFor,
   validateHoursRange,
 } from "./hours"
+import { SESSION_SCAN_LIMIT } from "./limits"
 
 const clockSessionDoc = v.object({
   _id: v.id("clockSessions"),
@@ -19,6 +21,10 @@ const clockSessionDoc = v.object({
   status: v.optional(v.union(v.literal("open"), v.literal("closed"))),
 })
 
+// Tolerance for clock skew between the mentor's browser, which turns the
+// datetime-local inputs into timestamps, and the server.
+const FUTURE_TOLERANCE_MS = 5 * 60_000
+
 function validateClockRange(clockIn: number, clockOut?: number) {
   if (!Number.isFinite(clockIn)) throw new Error("Clock in must be a valid time")
   if (clockOut !== undefined && !Number.isFinite(clockOut)) {
@@ -27,6 +33,21 @@ function validateClockRange(clockIn: number, clockOut?: number) {
   if (clockOut !== undefined && clockOut <= clockIn) {
     throw new Error("Clock out must be after clock in")
   }
+  // A future clock-in makes the live timers count down from a negative elapsed
+  // time, and a future open session blocks every later clock-in for that
+  // member, so neither bound may be scheduled ahead of now.
+  const latest = Date.now() + FUTURE_TOLERANCE_MS
+  if (clockIn > latest) throw new Error("Clock in cannot be in the future")
+  if (clockOut !== undefined && clockOut > latest) {
+    throw new Error("Clock out cannot be in the future")
+  }
+}
+
+// Records that a kiosk is alive, so mentors can see on the devices list which
+// tablet is actually in use before revoking one.
+async function touchKiosk(ctx: MutationCtx, caller: Caller) {
+  if (caller.kind !== "kiosk") return
+  await ctx.db.patch(caller.device._id, { lastSeenAt: Date.now() })
 }
 
 async function requireMember(ctx: QueryCtx | MutationCtx, id: Id<"teamMembers">) {
@@ -35,9 +56,10 @@ async function requireMember(ctx: QueryCtx | MutationCtx, id: Id<"teamMembers">)
   return member
 }
 
-// Mentor-only (unlocked kiosk): completed hours this year + open session, if any.
+// Kiosk tablet (device token) or a signed-in mentor: completed hours for the
+// configured range plus the open session, if any.
 export const getMemberStatus = query({
-  args: { teamMemberId: v.id("teamMembers") },
+  args: { teamMemberId: v.id("teamMembers"), kioskToken: v.optional(v.string()) },
   returns: v.object({
     completedMs: v.number(),
     currentSession: v.union(clockSessionDoc, v.null()),
@@ -46,8 +68,8 @@ export const getMemberStatus = query({
       endAt: v.optional(v.number()),
     }),
   }),
-  handler: async (ctx, { teamMemberId }) => {
-    await requireMentor(ctx)
+  handler: async (ctx, { teamMemberId, kioskToken }) => {
+    await requireKioskOrMentor(ctx, kioskToken)
     await requireMember(ctx, teamMemberId)
     const hoursRange = await getConfiguredHoursRange(ctx)
     const completedMs = await completedMsForRange(ctx, teamMemberId, hoursRange)
@@ -68,43 +90,27 @@ export const getForMember = query({
     await requireMentor(ctx)
     const range = startAt === undefined ? await getConfiguredHoursRange(ctx) : { startAt, endAt }
     validateHoursRange(range)
-    const query = ctx.db
+    // Both bounds in the index, so the limit applies to the requested range.
+    // The previous version took the newest 500 from `startAt` and filtered the
+    // end in JS, which truncated the oldest rows while `completedMsForRange`
+    // truncated the newest — the same member could show two different totals.
+    const sessions = await ctx.db
       .query("clockSessions")
-      .withIndex("by_teamMemberId_clockIn", (q) =>
-        q.eq("teamMemberId", teamMemberId).gte("clockIn", range.startAt),
-      )
+      .withIndex("by_teamMemberId_clockIn", (q) => {
+        const scoped = q.eq("teamMemberId", teamMemberId).gte("clockIn", range.startAt)
+        return range.endAt === undefined ? scoped : scoped.lt("clockIn", range.endAt)
+      })
       .order("desc")
-      .take(500)
-    const sessions = await query
-    return range.endAt === undefined ? sessions : sessions.filter((s) => s.clockIn < range.endAt!)
+      .take(SESSION_SCAN_LIMIT)
+
+    if (sessions.length === SESSION_SCAN_LIMIT) {
+      throw new Error(
+        `More than ${SESSION_SCAN_LIMIT} sessions in this range — narrow the reporting range`,
+      )
+    }
+    return sessions
   },
 })
-
-// Returns the single open (not-yet-clocked-out) session for a member, or null.
-// Scoped by the by_teamMemberId index; a member has at most a handful of rows.
-async function openSessionFor(
-  ctx: QueryCtx | MutationCtx,
-  teamMemberId: Id<"teamMembers">,
-) {
-  const indexed = await ctx.db
-    .query("clockSessions")
-    .withIndex("by_teamMemberId_and_status", (q) =>
-      q.eq("teamMemberId", teamMemberId).eq("status", "open"),
-    )
-    .take(2)
-  if (indexed.length > 1) throw new Error("Multiple open sessions found")
-  if (indexed[0]) return indexed[0]
-
-  // Backward-compatible rollout fallback for old rows missing `status`.
-  const recent = await ctx.db
-    .query("clockSessions")
-    .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", teamMemberId))
-    .order("desc")
-    .take(200)
-  const open = recent.filter((s) => sessionStatus(s) === "open")
-  if (open.length > 1) throw new Error("Multiple open sessions found")
-  return open[0] ?? null
-}
 
 async function assertNoOverlappingSession(
   ctx: QueryCtx | MutationCtx,
@@ -115,30 +121,48 @@ async function assertNoOverlappingSession(
     ignoreSessionId?: Id<"clockSessions">
   },
 ) {
-  const existing = await ctx.db
+  const proposedEnd = args.clockOut ?? Number.POSITIVE_INFINITY
+
+  // An open session has no end, so it collides with anything starting after it
+  // no matter how far back it began. It can sit anywhere in `clockIn` order, so
+  // it is checked directly rather than left to the bounded walk below.
+  const open = await openSessionFor(ctx, args.teamMemberId)
+  if (open && open._id !== args.ignoreSessionId && open.clockIn < proposedEnd) {
+    throw new Error("Session overlaps an existing session")
+  }
+
+  // Only sessions starting before the proposed end can overlap it. Walking
+  // newest-first, the first closed candidate that starts at or before the
+  // proposed start settles the question: sessions never overlap each other, so
+  // anything earlier ends earlier still. That bounds this to a couple of reads
+  // instead of the previous `.take(500)`, which could miss an overlap beyond
+  // the window and silently accept a double-counted entry.
+  const candidates = ctx.db
     .query("clockSessions")
     .withIndex("by_teamMemberId_clockIn", (q) => {
       const scoped = q.eq("teamMemberId", args.teamMemberId)
       return args.clockOut === undefined ? scoped : scoped.lte("clockIn", args.clockOut)
     })
     .order("desc")
-    .take(500)
 
-  const proposedEnd = args.clockOut ?? Number.POSITIVE_INFINITY
-  const overlap = existing.find((session) => {
-    if (session._id === args.ignoreSessionId) return false
-    const existingEnd = session.clockOut ?? Number.POSITIVE_INFINITY
-    return session.clockIn < proposedEnd && args.clockIn < existingEnd
-  })
-  if (overlap) throw new Error("Session overlaps an existing session")
+  for await (const session of candidates) {
+    if (session._id === args.ignoreSessionId) continue
+    if (session.clockOut === undefined) continue // open sessions handled above
+    if (session.clockIn < proposedEnd && args.clockIn < session.clockOut) {
+      throw new Error("Session overlaps an existing session")
+    }
+    if (session.clockIn <= args.clockIn) return
+  }
 }
 
-// Mentor-only (unlocked kiosk): open a session if none is open.
+// Kiosk tablet (device token) or a signed-in mentor: open a session if none
+// is open.
 export const clockIn = mutation({
-  args: { teamMemberId: v.id("teamMembers") },
+  args: { teamMemberId: v.id("teamMembers"), kioskToken: v.optional(v.string()) },
   returns: v.id("clockSessions"),
-  handler: async (ctx, { teamMemberId }) => {
-    await requireMentor(ctx)
+  handler: async (ctx, { teamMemberId, kioskToken }) => {
+    const caller = await requireKioskOrMentor(ctx, kioskToken)
+    await touchKiosk(ctx, caller)
     await requireMember(ctx, teamMemberId)
     const existing = await openSessionFor(ctx, teamMemberId)
     if (existing) throw new Error("Already clocked in")
@@ -148,12 +172,13 @@ export const clockIn = mutation({
   },
 })
 
-// Mentor-only (unlocked kiosk): close the open session.
+// Kiosk tablet (device token) or a signed-in mentor: close the open session.
 export const clockOut = mutation({
-  args: { teamMemberId: v.id("teamMembers") },
+  args: { teamMemberId: v.id("teamMembers"), kioskToken: v.optional(v.string()) },
   returns: v.null(),
-  handler: async (ctx, { teamMemberId }) => {
-    await requireMentor(ctx)
+  handler: async (ctx, { teamMemberId, kioskToken }) => {
+    const caller = await requireKioskOrMentor(ctx, kioskToken)
+    await touchKiosk(ctx, caller)
     await requireMember(ctx, teamMemberId)
     const session = await openSessionFor(ctx, teamMemberId)
     if (!session) throw new Error("Not clocked in")
