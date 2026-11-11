@@ -148,3 +148,26 @@
     @apply font-sans;
     }
 }
+/* Printing a member badge: the QR card is the only thing that should reach the
+   page. Everything else is hidden rather than removed so the card keeps its
+   layout. Marked with data-print-area in src/routes/members/detail.tsx. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  [data-print-area],
+  [data-print-area] * {
+    visibility: visible;
+  }
+  [data-print-area] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    border: none;
+    box-shadow: none;
+  }
+  [data-print-hide] {
+    display: none !important;
+  }
+}

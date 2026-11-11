@@ -15,10 +15,15 @@ import type * as clockSessions from "../clockSessions.js";
 import type * as dashboard from "../dashboard.js";
 import type * as hours from "../hours.js";
 import type * as http from "../http.js";
+import type * as kiosk from "../kiosk.js";
+import type * as kioskAuth from "../kioskAuth.js";
+import type * as limits from "../limits.js";
+import type * as memberId from "../memberId.js";
 import type * as migrations from "../migrations.js";
 import type * as settings from "../settings.js";
 import type * as studentInfo from "../studentInfo.js";
 import type * as teamMembers from "../teamMembers.js";
+import type * as timeZone from "../timeZone.js";
 import type * as users from "../users.js";
 
 import type {
@@ -35,10 +40,15 @@ declare const fullApi: ApiFromModules<{
   dashboard: typeof dashboard;
   hours: typeof hours;
   http: typeof http;
+  kiosk: typeof kiosk;
+  kioskAuth: typeof kioskAuth;
+  limits: typeof limits;
+  memberId: typeof memberId;
   migrations: typeof migrations;
   settings: typeof settings;
   studentInfo: typeof studentInfo;
   teamMembers: typeof teamMembers;
+  timeZone: typeof timeZone;
   users: typeof users;
 }>;
 

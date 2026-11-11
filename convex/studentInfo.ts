@@ -1,5 +1,6 @@
 import { v } from "convex/values"
 import type { Doc } from "./_generated/dataModel"
+import { zonedDateParts } from "./timeZone"
 
 export const studentGradeValidator = v.union(
   v.literal(6),
@@ -16,11 +17,15 @@ export const displayGradeValidator = v.union(studentGradeValidator, v.null())
 
 export type StudentGrade = 6 | 7 | 8 | 9 | 10 | 11 | 12 | "alumni"
 
+// School years roll over on July 1. For example, June 2027 is still the 2026
+// school year, while July 2027 starts the 2027 school year.
+//
+// Evaluated in the team's zone: with the server's local date (UTC on Convex)
+// the rollover landed on the evening of June 30 team-time, so for a few hours
+// every year the backend advanced grades that the browser had not.
 export function currentSchoolYear(now = Date.now()): number {
-  const d = new Date(now)
-  // School years roll over on July 1. For example, June 2027 is still the
-  // 2026 school year, while July 2027 starts the 2027 school year.
-  return d.getMonth() >= 6 ? d.getFullYear() : d.getFullYear() - 1
+  const { year, month } = zonedDateParts(now)
+  return month >= 7 ? year : year - 1
 }
 
 export function computeDisplayGrade(
@@ -32,9 +37,4 @@ export function computeDisplayGrade(
   const asOf = member.studentGradeAsOfSchoolYear ?? currentSchoolYear(now)
   const advanced = member.studentGrade + Math.max(0, currentSchoolYear(now) - asOf)
   return advanced > 12 ? "alumni" : (advanced as StudentGrade)
-}
-
-export function formatGrade(grade: StudentGrade | null | undefined): string {
-  if (grade === null || grade === undefined) return ""
-  return grade === "alumni" ? "Alumni" : String(grade)
 }

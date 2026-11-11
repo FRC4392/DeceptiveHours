@@ -29,6 +29,21 @@ export default defineSchema({
     .index("by_clerkUserId", ["clerkUserId"])
     .index("by_authTokenIdentifier", ["authTokenIdentifier"]),
 
+  // A shared tablet left running in the room. It holds a long-lived device
+  // token instead of a mentor's Clerk session, so walking up to it grants the
+  // clock screen and nothing else — no roster, no invites, no deletions.
+  //
+  // Only the SHA-256 of the token is stored: the plaintext is shown once, at
+  // setup, and never again.
+  kioskDevices: defineTable({
+    name: v.string(),
+    tokenHash: v.string(),
+    createdByMemberId: v.id("teamMembers"),
+    expiresAt: v.number(),
+    lastSeenAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  }).index("by_tokenHash", ["tokenHash"]),
+
   appSettings: defineTable({
     key: v.string(),
     hoursRangeStart: v.optional(v.number()),
@@ -46,5 +61,9 @@ export default defineSchema({
     .index("by_teamMemberId", ["teamMemberId"])
     .index("by_teamMemberId_clockIn", ["teamMemberId", "clockIn"])
     .index("by_teamMemberId_and_status", ["teamMemberId", "status"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    // `clockOut: undefined` is the definitive open-session marker for both new
+    // and pre-`status` rows, so this index answers "is this member clocked in?"
+    // exactly, without the bounded scan the status rollout used to need.
+    .index("by_teamMemberId_clockOut", ["teamMemberId", "clockOut"]),
 })

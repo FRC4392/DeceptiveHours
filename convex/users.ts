@@ -47,3 +47,20 @@ export const assertMentor = internalQuery({
     return { clerkUserId: member.clerkUserId }
   },
 })
+
+/**
+ * Resolve a roster row's Clerk user ID for Node actions, which have no
+ * `ctx.db`. Lets `api.clerk.updateUserRole` take a `teamMemberId` so the client
+ * never needs the Clerk identifier — `teamMembers.getById` deliberately omits
+ * it from the shape the kiosk and member detail pages read.
+ */
+export const memberClerkUserId = internalQuery({
+  args: { teamMemberId: v.id("teamMembers") },
+  returns: v.object({ clerkUserId: v.string() }),
+  handler: async (ctx, { teamMemberId }) => {
+    const member = await ctx.db.get(teamMemberId)
+    if (!member) throw new Error("Member not found")
+    if (!member.clerkUserId) throw new Error("Member has no linked Clerk account")
+    return { clerkUserId: member.clerkUserId }
+  },
+})

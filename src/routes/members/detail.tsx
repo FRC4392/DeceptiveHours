@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useParams, Link } from "react-router"
-import { useMutation, useQuery } from "convex/react"
+import { useAction, useMutation, useQuery } from "convex/react"
 import { api } from "@convex/_generated/api"
 import type { Id } from "@convex/_generated/dataModel"
 import { QRCodeSVG } from "qrcode.react"
@@ -42,14 +42,18 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import {
+  AlertTriangle,
   ArrowLeft,
   Download,
   Pencil,
   Plus,
+  Printer,
   Trash2,
   QrCode,
   RotateCcw,
 } from "lucide-react"
+import { isStaleSession } from "@/lib/sessions"
+import { Spinner } from "@/components/spinner"
 import { toast } from "sonner"
 import {
   formatDate,
@@ -71,6 +75,10 @@ import {
 
 type MemberType = "student" | "mentor"
 
+// Base UI's Select treats "" as no selection, so clearing the grade needs an
+// explicit sentinel option rather than an empty-valued item.
+const GRADE_UNSET = "__unset__"
+
 interface SessionForm {
   clockIn: string
   clockOut: string
@@ -88,8 +96,9 @@ interface MemberForm {
 type HoursRange = { startAt: number; endAt?: number }
 
 export default function MemberDetailPage() {
-  const { memberId } = useParams<{ memberId: string }>()
-  const id = memberId as Id<"teamMembers">
+  // The Convex document ID from the URL, not the team's 10-digit Member ID.
+  const { memberDocId } = useParams<{ memberDocId: string }>()
+  const id = memberDocId as Id<"teamMembers">
 
   const member = useQuery(api.teamMembers.getById, { id })
   const settingsRange = useQuery(api.settings.getHoursRange)
@@ -99,9 +108,11 @@ export default function MemberDetailPage() {
     ...(appliedRange ?? {}),
   })
   const updateMember = useMutation(api.teamMembers.update)
+  const updateUserRole = useAction(api.clerk.updateUserRole)
   const addSession = useMutation(api.clockSessions.addSession)
   const updateSession = useMutation(api.clockSessions.updateSession)
   const deleteSession = useMutation(api.clockSessions.deleteSession)
+  const clockOutMember = useMutation(api.clockSessions.clockOut)
 
   const [editMemberOpen, setEditMemberOpen] = useState(false)
   const [memberForm, setMemberForm] = useState<MemberForm | null>(null)
@@ -112,6 +123,7 @@ export default function MemberDetailPage() {
   const [sessionForm, setSessionForm] = useState<SessionForm>({ clockIn: "", clockOut: "" })
   const [savingSession, setSavingSession] = useState(false)
 
+  const [clockingOut, setClockingOut] = useState(false)
   const [deleteSessionId, setDeleteSessionId] = useState<Id<"clockSessions"> | null>(null)
   const [showQr, setShowQr] = useState(false)
   const [startDateDraft, setStartDateDraft] = useState<string | null>(null)
@@ -131,7 +143,7 @@ export default function MemberDetailPage() {
   if (member === undefined || sessions === undefined || settingsRange === undefined) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <Spinner label="Loading member" />
       </div>
     )
   }
@@ -191,6 +203,20 @@ export default function MemberDetailPage() {
     }
   }
 
+  // Closes the member's open session at the current time. Without this the only
+  // way to fix a forgotten clock-out was to hand-edit the session's times.
+  async function handleClockOut() {
+    setClockingOut(true)
+    try {
+      await clockOutMember({ teamMemberId: id })
+      toast.success("Clocked out")
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to clock out")
+    } finally {
+      setClockingOut(false)
+    }
+  }
+
   async function handleDeleteSession(sid: Id<"clockSessions">) {
     try {
       await deleteSession({ id: sid })
@@ -209,8 +235,11 @@ export default function MemberDetailPage() {
       memberId: member!.memberId,
       type: member!.type,
       studentStartYear: member!.studentStartYear ? String(member!.studentStartYear) : "",
-      studentGrade:
-        member!.studentGrade === undefined ? "" : String(member!.studentGrade),
+      // Seed from the *displayed* grade, not the stored one. Saving re-pins
+      // `studentGradeAsOfSchoolYear` to the current school year, so seeding the
+      // pre-rollover stored value would roll the student back a grade on any
+      // unrelated edit (a name fix, say).
+      studentGrade: member!.displayGrade === null ? "" : String(member!.displayGrade),
     })
     setEditMemberOpen(true)
   }
@@ -225,7 +254,6 @@ export default function MemberDetailPage() {
         firstName: string
         lastName: string
         memberId: string
-        type: MemberType
         studentStartYear?: number
         studentGrade?: StudentGrade
         studentGradeAsOfSchoolYear?: number
@@ -234,8 +262,8 @@ export default function MemberDetailPage() {
         firstName: memberForm.firstName,
         lastName: memberForm.lastName,
         memberId: memberForm.memberId,
-        type: memberForm.type,
       }
+      // Omitting these clears them, which is how the "Not set" options work.
       if (memberForm.type === "student") {
         if (memberForm.studentStartYear.trim()) {
           payload.studentStartYear = Number.parseInt(memberForm.studentStartYear, 10)
@@ -249,6 +277,12 @@ export default function MemberDetailPage() {
         }
       }
       await updateMember(payload)
+      // Role is Clerk-owned, so it travels through a separate action. Done
+      // after the local save so a rejected self-demotion leaves the rest
+      // of the edit applied.
+      if (memberForm.type !== member!.type) {
+        await updateUserRole({ teamMemberId: id, role: memberForm.type })
+      }
       toast.success("Member updated")
       setEditMemberOpen(false)
     } catch (e) {
@@ -259,7 +293,15 @@ export default function MemberDetailPage() {
   }
 
   function exportMemberHours() {
-    if (!member || !sessions) return
+    if (!member || !sessions || !settingsRange) return
+    // Label the range the session rows actually came from. Reading the draft
+    // inputs here meant that editing the dates and exporting without pressing
+    // Apply produced a CSV whose header disagreed with its own contents.
+    const effectiveRange = appliedRange ?? settingsRange
+    const rangeStartLabel = toDateInput(effectiveRange.startAt)
+    const rangeEndLabel = effectiveRange.endAt
+      ? toDateInput(effectiveRange.endAt - 1)
+      : "Now"
     const activeCount = sessions.filter((s) => !s.clockOut).length
     const daily = new Map<string, number>()
     const weekly = new Map<string, number>()
@@ -273,8 +315,8 @@ export default function MemberDetailPage() {
     downloadCsv(`${member.firstName}-${member.lastName}-hours.csv`, [
       ["Member", `${member.firstName} ${member.lastName}`],
       ["Member ID", member.memberId],
-      ["Range Start", startDate],
-      ["Range End", endDate || "Now"],
+      ["Range Start", rangeStartLabel],
+      ["Range End", rangeEndLabel],
       ["Total Hours", formatTotalHours(totalRangeMs)],
       ["Completed Sessions", completedSessions.length],
       ["Active Sessions Omitted", activeCount],
@@ -315,7 +357,7 @@ export default function MemberDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-3">
         <Link to="/members">
-          <Button variant="ghost" size="icon">
+          <Button variant="ghost" size="icon" aria-label="Back to members">
             <ArrowLeft className="h-4 w-4" />
           </Button>
         </Link>
@@ -400,7 +442,7 @@ export default function MemberDetailPage() {
 
         <Card>
           <CardHeader>
-            <CardTitle>Hours Range</CardTitle>
+            <CardTitle>Hours in Range</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="text-center">
@@ -470,16 +512,33 @@ export default function MemberDetailPage() {
       {/* QR Code */}
       {showQr && (
         <Card>
-          <CardHeader>
+          <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle>Member QR Code</CardTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              data-print-hide
+              onClick={() => window.print()}
+            >
+              <Printer className="h-4 w-4" />
+              Print
+            </Button>
           </CardHeader>
-          <CardContent className="flex flex-col items-center gap-3">
+          <CardContent
+            className="flex flex-col items-center gap-3"
+            // Print styles in src/index.css hide everything outside this
+            // element, so the badge prints on its own sheet.
+            data-print-area
+          >
             <div className="rounded-xl border bg-white p-4">
               <QRCodeSVG value={member.memberId} size={160} />
             </div>
-            <p className="text-sm text-muted-foreground">
-              This QR code encodes the Member ID:{" "}
-              <span className="font-mono font-medium">{member.memberId}</span>
+            <p className="text-center text-sm text-muted-foreground">
+              <span className="block font-medium text-foreground">
+                {member.firstName} {member.lastName}
+              </span>
+              Member ID <span className="font-mono font-medium">{member.memberId}</span>
             </p>
           </CardContent>
         </Card>
@@ -524,6 +583,14 @@ export default function MemberDetailPage() {
                     <TableCell className="text-sm">
                       {session.clockOut ? (
                         formatDateTime(session.clockOut)
+                      ) : isStaleSession(session.clockIn) ? (
+                        <Badge
+                          variant="secondary"
+                          className="gap-1 bg-amber-100 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300"
+                        >
+                          <AlertTriangle className="h-3 w-3" />
+                          Open 12h+
+                        </Badge>
                       ) : (
                         <Badge variant="secondary" className="text-xs">
                           Active
@@ -535,10 +602,22 @@ export default function MemberDetailPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {!session.clockOut && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => handleClockOut()}
+                            disabled={clockingOut}
+                          >
+                            {clockingOut ? "…" : "Clock out"}
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
+                          aria-label="Edit session"
                           onClick={() => openEditSession(session)}
                         >
                           <Pencil className="h-3.5 w-3.5" />
@@ -547,6 +626,7 @@ export default function MemberDetailPage() {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8 text-destructive hover:text-destructive"
+                          aria-label="Delete session"
                           onClick={() => setDeleteSessionId(session._id)}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -617,6 +697,10 @@ export default function MemberDetailPage() {
                     <SelectItem value="mentor">Mentor</SelectItem>
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">
+                  Saved to the member's Clerk account. You cannot remove your own
+                  mentor access.
+                </p>
               </div>
               {memberForm.type === "student" && (
                 <div className="grid grid-cols-2 gap-3">
@@ -635,15 +719,22 @@ export default function MemberDetailPage() {
                   <div className="space-y-2">
                     <Label>Current Grade</Label>
                     <Select
-                      value={memberForm.studentGrade}
+                      value={memberForm.studentGrade || GRADE_UNSET}
                       onValueChange={(v) =>
-                        setMemberForm((f) => f && { ...f, studentGrade: v ?? "" })
+                        setMemberForm(
+                          (f) =>
+                            f && {
+                              ...f,
+                              studentGrade: !v || v === GRADE_UNSET ? "" : v,
+                            },
+                        )
                       }
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Grade" />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value={GRADE_UNSET}>Not set</SelectItem>
                         {[6, 7, 8, 9, 10, 11, 12].map((grade) => (
                           <SelectItem key={grade} value={String(grade)}>
                             Grade {grade}

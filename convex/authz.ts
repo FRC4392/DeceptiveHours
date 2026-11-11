@@ -1,5 +1,6 @@
 import type { Doc } from "./_generated/dataModel"
 import type { QueryCtx, MutationCtx } from "./_generated/server"
+import { resolveKioskDevice } from "./kioskAuth"
 
 type Ctx = QueryCtx | MutationCtx
 
@@ -37,4 +38,33 @@ export async function requireMentor(ctx: Ctx): Promise<Doc<"teamMembers">> {
   if (!member) throw new Error("Unauthorized")
   if (member.type !== "mentor") throw new Error("Forbidden: mentors only")
   return member
+}
+
+export type Caller =
+  | { kind: "kiosk"; device: Doc<"kioskDevices"> }
+  | { kind: "mentor"; member: Doc<"teamMembers"> }
+
+/**
+ * Gate for the five clock-screen functions, which serve two very different
+ * callers:
+ *
+ * - the shared tablet in the room, holding a long-lived device token and no
+ *   Clerk session at all, so anyone who walks up to it can clock in and out
+ *   but cannot reach the roster, invites or deletions; and
+ * - a mentor clocking someone in from their own phone, with a normal Clerk
+ *   session they keep.
+ *
+ * A supplied token is authoritative: if it is present but revoked or expired
+ * the error says so instead of falling through to a confusing "Unauthorized".
+ * Every other function in the app stays `requireMentor`-only.
+ */
+export async function requireKioskOrMentor(
+  ctx: Ctx,
+  kioskToken?: string,
+): Promise<Caller> {
+  if (kioskToken) {
+    const device = await resolveKioskDevice(ctx, kioskToken)
+    return { kind: "kiosk", device }
+  }
+  return { kind: "mentor", member: await requireMentor(ctx) }
 }

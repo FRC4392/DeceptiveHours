@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery } from "convex/react"
-import { Link } from "react-router"
+import { Link, useNavigate } from "react-router"
 import { api } from "@convex/_generated/api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,10 +24,22 @@ import {
   toDateInput,
 } from "@/lib/format"
 import { downloadCsv } from "@/lib/csv"
-import { formatStudentGrade } from "@/lib/student-info"
+import { formatStudentGrade, initials } from "@/lib/student-info"
 import { useElapsedMs } from "@/hooks/use-elapsed-ms"
-import { Clock, Download, RotateCcw, Save, Timer, Users, UserCheck } from "lucide-react"
+import { isStaleSession } from "@/lib/sessions"
+import type { Id } from "@convex/_generated/dataModel"
+import {
+  AlertTriangle,
+  Clock,
+  Download,
+  RotateCcw,
+  Save,
+  Timer,
+  Users,
+  UserCheck,
+} from "lucide-react"
 import { toast } from "sonner"
+import { Spinner } from "@/components/spinner"
 
 type HoursRange = { startAt: number; endAt?: number }
 type RoleBreakdown = {
@@ -36,6 +48,7 @@ type RoleBreakdown = {
 }
 
 export default function DashboardPage() {
+  const navigate = useNavigate()
   const [appliedRange, setAppliedRange] = useState<HoursRange | null>(null)
   const [startDateDraft, setStartDateDraft] = useState<string | null>(null)
   const [endDateDraft, setEndDateDraft] = useState<string | null>(null)
@@ -56,7 +69,7 @@ export default function DashboardPage() {
   if (!data) {
     return (
       <div className="flex items-center justify-center py-24">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+        <Spinner label="Loading dashboard" />
       </div>
     )
   }
@@ -112,6 +125,9 @@ export default function DashboardPage() {
     },
     { mentors: 0, students: 0 },
   )
+  const staleCount = data.currentlySignedIn.filter(
+    (m) => m.currentSession && isStaleSession(m.currentSession.clockIn),
+  ).length
   const hourTotals = data.members.reduce(
     (totals, member) => {
       if (member.type === "mentor") totals.mentors += member.completedMs
@@ -130,7 +146,7 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Hours Range</CardTitle>
+          <CardTitle>Reporting Range</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 lg:flex-row lg:items-end">
           <div className="grid gap-2 sm:grid-cols-2 lg:w-auto">
@@ -258,6 +274,14 @@ export default function DashboardPage() {
               </span>
               Currently Clocked In
             </CardTitle>
+            {staleCount > 0 && (
+              <p className="flex items-center gap-1.5 text-sm text-amber-700 dark:text-amber-400">
+                <AlertTriangle className="h-4 w-4 shrink-0" />
+                {staleCount} {staleCount === 1 ? "session has" : "sessions have"} been
+                open over 12 hours — likely a forgotten clock-out. Clocking someone
+                out here records the hours up to now.
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -301,6 +325,10 @@ export default function DashboardPage() {
                   <TableRow
                     key={member._id}
                     className="cursor-pointer hover:bg-muted/50"
+                    // The row already looked clickable but only the name cell
+                    // actually navigated. The name stays a real link so
+                    // keyboard and screen-reader users still get one.
+                    onClick={() => navigate(`/members/${member._id}`)}
                   >
                     <TableCell>
                       <Link
@@ -365,25 +393,57 @@ function ClockInCard({
 }) {
   const clockInTime = member.currentSession?.clockIn ?? null
   const elapsed = useElapsedMs(clockInTime)
+  const clockOut = useMutation(api.clockSessions.clockOut)
+  const [clockingOut, setClockingOut] = useState(false)
+  const stale = clockInTime !== null && isStaleSession(clockInTime)
+
+  async function handleClockOut() {
+    setClockingOut(true)
+    try {
+      await clockOut({ teamMemberId: member._id as Id<"teamMembers"> })
+      toast.success(`${member.firstName} ${member.lastName} clocked out`)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to clock out")
+    } finally {
+      setClockingOut(false)
+    }
+  }
 
   return (
-    <Link
-      to={`/members/${member._id}`}
-      className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
+    <div
+      className={`flex items-center gap-3 rounded-lg border p-3 ${
+        stale ? "border-amber-500/60 bg-amber-50 dark:bg-amber-950/20" : ""
+      }`}
     >
       <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">
-        {member.firstName[0]}
-        {member.lastName[0]}
+        {initials(member.firstName, member.lastName)}
       </div>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-medium">
+      <div className="min-w-0 flex-1">
+        <Link
+          to={`/members/${member._id}`}
+          className="truncate text-sm font-medium hover:text-primary"
+        >
           {member.firstName} {member.lastName}
-        </p>
-        <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Timer className="h-3 w-3" />
+        </Link>
+        <p
+          className={`flex items-center gap-1 text-xs ${
+            stale ? "font-medium text-amber-700 dark:text-amber-400" : "text-muted-foreground"
+          }`}
+        >
+          {stale ? <AlertTriangle className="h-3 w-3" /> : <Timer className="h-3 w-3" />}
           {formatDuration(elapsed)}
+          {stale && " — forgot to clock out?"}
         </p>
       </div>
-    </Link>
+      <Button
+        variant="outline"
+        size="sm"
+        className="shrink-0"
+        onClick={handleClockOut}
+        disabled={clockingOut}
+      >
+        {clockingOut ? "…" : "Clock out"}
+      </Button>
+    </div>
   )
 }

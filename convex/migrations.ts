@@ -90,6 +90,11 @@ export const clearWorkosEraRoster = mutation({
     deletedTeamMembers: v.number(),
   }),
   handler: async (ctx, { confirmation }) => {
+    // Mentor-gated like the backfills above. The env var and confirmation
+    // string are operator guard rails, not access control — the confirmation
+    // value is published in the README, so without this gate anyone holding
+    // the deployment URL could wipe the roster.
+    await requireMentor(ctx)
     if (process.env.ENABLE_DESTRUCTIVE_MIGRATIONS !== "true") {
       throw new Error("ENABLE_DESTRUCTIVE_MIGRATIONS must be true")
     }

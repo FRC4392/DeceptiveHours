@@ -1,5 +1,6 @@
 import { internalMutation } from "./_generated/server"
 import { v } from "convex/values"
+import { ROSTER_LIMIT } from "./limits"
 import type { GenericMutationCtx } from "convex/server"
 import type { DataModel } from "./_generated/dataModel"
 
@@ -117,6 +118,32 @@ export const upsertClerkUser = internalMutation({
   },
 })
 
+/**
+ * Mirror a Clerk role change into the roster immediately, so the UI reflects it
+ * without waiting on the `user.updated` webhook. Clerk stays the source of
+ * truth; this just avoids a visible lag.
+ */
+export const setMemberRole = internalMutation({
+  args: { clerkUserId: v.string(), role: roleValidator },
+  returns: v.null(),
+  handler: async (ctx, { clerkUserId, role }) => {
+    const member = await findMember(ctx, clerkUserId)
+    if (!member) return null
+    await ctx.db.patch(member._id, {
+      type: role,
+      // Mentors carry no grade information.
+      ...(role === "mentor"
+        ? {
+            studentStartYear: undefined,
+            studentGrade: undefined,
+            studentGradeAsOfSchoolYear: undefined,
+          }
+        : {}),
+    })
+    return null
+  },
+})
+
 export const deleteClerkUser = internalMutation({
   args: { clerkUserId: v.string() },
   returns: v.null(),
@@ -130,13 +157,18 @@ export const syncClerkUsers = internalMutation({
   args: {
     users: v.array(clerkUserForSyncValidator),
     requiredClerkUserId: v.string(),
+    // Pruning deletes roster rows *and every clock session they own*, so it is
+    // opt-in. The button's everyday job is filling in a missed webhook, which
+    // needs only the upserts below.
+    removeMissing: v.optional(v.boolean()),
   },
   returns: v.object({
     created: v.number(),
     updated: v.number(),
     deleted: v.number(),
+    removable: v.number(),
   }),
-  handler: async (ctx, { users, requiredClerkUserId }) => {
+  handler: async (ctx, { users, requiredClerkUserId, removeMissing }) => {
     let created = 0
     let updated = 0
     let deleted = 0
@@ -151,17 +183,22 @@ export const syncClerkUsers = internalMutation({
       else updated++
     }
 
-    const localMembers = await ctx.db.query("teamMembers").take(500)
-    if (localMembers.length === 500) {
+    const localMembers = await ctx.db.query("teamMembers").take(ROSTER_LIMIT)
+    if (localMembers.length === ROSTER_LIMIT) {
       throw new Error("Too many local users to sync in one operation")
     }
 
-    for (const member of localMembers) {
-      if (member.clerkUserId && !clerkUserIds.has(member.clerkUserId)) {
-        if (await deleteMember(ctx, member.clerkUserId)) deleted++
+    const missing = localMembers.filter(
+      (member) => member.clerkUserId && !clerkUserIds.has(member.clerkUserId),
+    )
+    if (removeMissing) {
+      for (const member of missing) {
+        if (await deleteMember(ctx, member.clerkUserId!)) deleted++
       }
     }
 
-    return { created, updated, deleted }
+    // `removable` lets the UI say exactly how many rows a pruning run would
+    // delete before the mentor opts in.
+    return { created, updated, deleted, removable: missing.length }
   },
 })
