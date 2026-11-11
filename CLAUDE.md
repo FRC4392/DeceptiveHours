@@ -187,8 +187,18 @@ students back a grade on any unrelated edit. Omitting `studentGrade` or
   clear error when the limit is hit. Keep that pattern.
 - Comments in this codebase explain *why* (rollout state, security reasoning,
   Clerk quirks), not *what*. Match the density — it's low.
-- Errors surface to users through `sonner` toasts; mutations throw plain
-  `Error`s with human-readable messages.
+- **Anything a user is meant to read must be thrown as `ConvexError`,** not
+  `Error`. A production Convex deployment replaces plain `Error` messages with
+  "[Request ID: …] Server Error" before they reach the client, so a plain throw
+  turns "Already clocked in" into an opaque failure — and it only shows up
+  after deploying, because dev and `convex-test` both pass the text through.
+  Plain `Error` is reserved for server misconfiguration and internal invariants
+  a user can do nothing about (`CLERK_SECRET_KEY is not set`,
+  `Failed to generate a unique memberId`).
+- Errors surface to users through `sonner` toasts. Read them with
+  `errorMessage(err, "Fallback wording")` from `src/lib/errors.ts`, never
+  `err.message` — the helper takes a `ConvexError`'s payload and falls back to
+  the caller's wording rather than showing production's redacted text.
 
 ## Testing
 

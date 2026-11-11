@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server"
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
 import { requireKioskOrMentor, requireMentor } from "./authz"
 import { ROSTER_LIMIT } from "./limits"
 import { MEMBER_ID_HINT, isMemberId } from "./memberId"
@@ -90,7 +90,7 @@ function toTeamMemberDoc(member: Doc<"teamMembers">) {
 }
 
 function validateMemberId(memberId: string) {
-  if (!isMemberId(memberId)) throw new Error(MEMBER_ID_HINT)
+  if (!isMemberId(memberId)) throw new ConvexError(MEMBER_ID_HINT)
 }
 
 // Kiosk tablet (device token) or a signed-in mentor: resolve a scanned or
@@ -128,7 +128,7 @@ export const list = query({
     await requireMentor(ctx)
     const members = await ctx.db.query("teamMembers").take(ROSTER_LIMIT)
     if (members.length === ROSTER_LIMIT) {
-      throw new Error(`Roster exceeds ${ROSTER_LIMIT} members — pagination is required`)
+      throw new ConvexError(`Roster exceeds ${ROSTER_LIMIT} members — pagination is required`)
     }
     return members
       .map(toTeamMemberDoc)
@@ -171,15 +171,15 @@ export const update = mutation({
 
     const firstName = fields.firstName.trim()
     const lastName = fields.lastName.trim()
-    if (!firstName || !lastName) throw new Error("First and last name are required")
+    if (!firstName || !lastName) throw new ConvexError("First and last name are required")
 
     const member = await ctx.db.get(id)
-    if (!member) throw new Error("Member not found")
+    if (!member) throw new ConvexError("Member not found")
     const existing = await ctx.db
       .query("teamMembers")
       .withIndex("by_memberId", (q) => q.eq("memberId", fields.memberId))
       .unique()
-    if (existing && existing._id !== id) throw new Error("Member ID already in use")
+    if (existing && existing._id !== id) throw new ConvexError("Member ID already in use")
 
     const patch: {
       firstName: string
@@ -201,7 +201,7 @@ export const update = mutation({
       if (fields.studentStartYear !== undefined) {
         const year = fields.studentStartYear
         if (!Number.isInteger(year) || year < MIN_START_YEAR || year > MAX_START_YEAR) {
-          throw new Error(`Start year must be a whole year between ${MIN_START_YEAR} and ${MAX_START_YEAR}`)
+          throw new ConvexError(`Start year must be a whole year between ${MIN_START_YEAR} and ${MAX_START_YEAR}`)
         }
         patch.studentStartYear = year
       }

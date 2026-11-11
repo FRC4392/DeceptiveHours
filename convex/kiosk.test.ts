@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test"
 import { describe, expect, test } from "vitest"
+import { ConvexError } from "convex/values"
 import { api } from "./_generated/api"
 import schema from "./schema"
 import { KIOSK_TOKEN_TTL_MS } from "./kioskAuth"
@@ -156,6 +157,21 @@ describe("kiosk devices", () => {
       valid: false,
       reason: expect.stringContaining("expired"),
     })
+  })
+
+  test("messages a user must read are ConvexErrors, which survive production", async () => {
+    const { t, studentId, token } = await setup()
+    await t.mutation(api.clockSessions.clockIn, { teamMemberId: studentId, kioskToken: token })
+
+    // A production Convex deployment replaces plain `Error` messages with
+    // "Server Error" before the client sees them; only `ConvexError` keeps its
+    // payload. Anything a student or mentor is meant to act on must be one.
+    const clockInAgain = t
+      .mutation(api.clockSessions.clockIn, { teamMemberId: studentId, kioskToken: token })
+      .catch((error: unknown) => error)
+    const error = await clockInAgain
+    expect(error).toBeInstanceOf(ConvexError)
+    expect((error as ConvexError<string>).data).toBe("Already clocked in")
   })
 
   test("the stored token is hashed, so the database holds nothing usable", async () => {

@@ -1,5 +1,5 @@
 import { paginationOptsValidator } from "convex/server"
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
 import { mutation } from "./_generated/server"
 import { requireMentor } from "./authz"
 
@@ -96,19 +96,19 @@ export const clearWorkosEraRoster = mutation({
     // the deployment URL could wipe the roster.
     await requireMentor(ctx)
     if (process.env.ENABLE_DESTRUCTIVE_MIGRATIONS !== "true") {
-      throw new Error("ENABLE_DESTRUCTIVE_MIGRATIONS must be true")
+      throw new ConvexError("ENABLE_DESTRUCTIVE_MIGRATIONS must be true")
     }
     if (confirmation !== "DELETE_WORKOS_ROSTER") {
-      throw new Error("Invalid confirmation")
+      throw new ConvexError("Invalid confirmation")
     }
 
     const sessions = await ctx.db.query("clockSessions").take(500)
     if (sessions.length === 500) {
-      throw new Error("Too many clock sessions to clear in one run")
+      throw new ConvexError("Too many clock sessions to clear in one run")
     }
     const members = await ctx.db.query("teamMembers").take(500)
     if (members.length === 500) {
-      throw new Error("Too many team members to clear in one run")
+      throw new ConvexError("Too many team members to clear in one run")
     }
 
     await Promise.all(sessions.map((session) => ctx.db.delete(session._id)))

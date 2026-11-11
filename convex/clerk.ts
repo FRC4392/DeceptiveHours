@@ -3,7 +3,7 @@
 import { createClerkClient, type User } from "@clerk/backend"
 import { action } from "./_generated/server"
 import { internal } from "./_generated/api"
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
 
 type ClerkRole = "student" | "mentor"
 
@@ -52,9 +52,12 @@ export const inviteUser = action({
       // machine-readable payload. Re-inviting someone is a common mistake, so
       // it gets a sentence a mentor can act on.
       if (isDuplicateInvitationError(error)) {
-        throw new Error(
+        // `ConvexError` takes only its data payload, so the original is logged
+        // here instead of attached as a `cause` — the Convex function logs keep
+        // it for debugging while the mentor gets the readable sentence.
+        console.error("Duplicate Clerk invitation", error)
+        throw new ConvexError(
           `${email} already has a pending invitation. Revoke it below before sending a new one.`,
-          { cause: error },
         )
       }
       throw error
@@ -124,7 +127,7 @@ export const removeUser = action({
   handler: async (ctx, { clerkUserId }) => {
     const caller = await ctx.runQuery(internal.users.assertMentor, {})
     if (caller.clerkUserId === clerkUserId) {
-      throw new Error("You cannot remove your own account")
+      throw new ConvexError("You cannot remove your own account")
     }
 
     await getClient().users.deleteUser(clerkUserId)
@@ -151,7 +154,7 @@ export const updateUserRole = action({
     const caller = await ctx.runQuery(internal.users.assertMentor, {})
     const target = await ctx.runQuery(internal.users.memberClerkUserId, { teamMemberId })
     if (caller.clerkUserId === target.clerkUserId && role !== "mentor") {
-      throw new Error("You cannot remove your own mentor access")
+      throw new ConvexError("You cannot remove your own mentor access")
     }
 
     // `updateUserMetadata` merges, so invitation metadata such as the person's
@@ -201,7 +204,7 @@ export const syncUsers = action({
     } while (offset < totalCount && pageCount > 0)
 
     if (users.length < totalCount) {
-      throw new Error("Sync cancelled because the full Clerk user list could not be fetched")
+      throw new ConvexError("Sync cancelled because the full Clerk user list could not be fetched")
     }
 
     const result: Omit<SyncUsersResult, "scanned"> = await ctx.runMutation(

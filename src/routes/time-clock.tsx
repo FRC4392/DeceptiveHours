@@ -11,6 +11,7 @@ import { useElapsedMs } from "@/hooks/use-elapsed-ms"
 import { LogIn, LogOut, QrCode, RotateCcw, Users } from "lucide-react"
 import logo from "@/assets/logo.png"
 import { toast } from "sonner"
+import { errorMessage } from "@/lib/errors"
 import { Spinner } from "@/components/spinner"
 import { initials } from "@/lib/student-info"
 import { MEMBER_ID_HINT, isMemberId } from "@convex/memberId"
@@ -257,7 +258,7 @@ function MemberCard({
         onDone("out")
       }
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Something went wrong")
+      toast.error(errorMessage(e, "Something went wrong"))
       setActing(false)
     }
   }

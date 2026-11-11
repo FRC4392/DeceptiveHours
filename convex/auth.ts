@@ -1,5 +1,5 @@
 import { internalMutation } from "./_generated/server"
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
 import { ROSTER_LIMIT } from "./limits"
 import type { GenericMutationCtx } from "convex/server"
 import type { DataModel } from "./_generated/dataModel"
@@ -62,7 +62,7 @@ async function deleteMember(ctx: MutationCtx, clerkUserId: string): Promise<bool
     .withIndex("by_teamMemberId", (q) => q.eq("teamMemberId", member._id))
     .take(500)
   if (sessions.length === 500) {
-    throw new Error("Member has too many sessions to remove in one operation")
+    throw new ConvexError("Member has too many sessions to remove in one operation")
   }
   await Promise.all(sessions.map((s) => ctx.db.delete(s._id)))
   await ctx.db.delete(member._id)
@@ -174,7 +174,7 @@ export const syncClerkUsers = internalMutation({
     let deleted = 0
     const clerkUserIds = new Set(users.map((user) => user.clerkUserId))
     if (!clerkUserIds.has(requiredClerkUserId)) {
-      throw new Error("Sync cancelled because the signed-in mentor was not found in Clerk")
+      throw new ConvexError("Sync cancelled because the signed-in mentor was not found in Clerk")
     }
 
     for (const user of users) {
@@ -185,7 +185,7 @@ export const syncClerkUsers = internalMutation({
 
     const localMembers = await ctx.db.query("teamMembers").take(ROSTER_LIMIT)
     if (localMembers.length === ROSTER_LIMIT) {
-      throw new Error("Too many local users to sync in one operation")
+      throw new ConvexError("Too many local users to sync in one operation")
     }
 
     const missing = localMembers.filter(

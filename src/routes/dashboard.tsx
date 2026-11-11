@@ -39,6 +39,7 @@ import {
   UserCheck,
 } from "lucide-react"
 import { toast } from "sonner"
+import { errorMessage } from "@/lib/errors"
 import { Spinner } from "@/components/spinner"
 
 type HoursRange = { startAt: number; endAt?: number }
@@ -81,7 +82,7 @@ export default function DashboardPage() {
       setAppliedRange(null)
       toast.success("Default hours range updated")
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save hours range")
+      toast.error(errorMessage(err, "Failed to save hours range"))
     }
   }
 
@@ -403,7 +404,7 @@ function ClockInCard({
       await clockOut({ teamMemberId: member._id as Id<"teamMembers"> })
       toast.success(`${member.firstName} ${member.lastName} clocked out`)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to clock out")
+      toast.error(errorMessage(err, "Failed to clock out"))
     } finally {
       setClockingOut(false)
     }
