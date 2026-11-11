@@ -30,3 +30,8 @@ dist-ssr
 # Convex local backend data
 convex_local_backend.sqlite3
 convex_local_storage
+
+# Roster exports and invite lists: student names and school email addresses.
+# Keep them out of the repository.
+*-invites.csv
+*-roster.csv
