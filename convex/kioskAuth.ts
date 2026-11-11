@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values"
 import type { Doc } from "./_generated/dataModel"
 import type { MutationCtx, QueryCtx } from "./_generated/server"
 
@@ -11,8 +12,12 @@ export const KIOSK_TOKEN_TTL_MS = 400 * 24 * 60 * 60 * 1000
  * Thrown when a token exists but is no longer usable. Distinct from a generic
  * authorization failure so the tablet can show "ask a mentor to set this
  * device up again" rather than a bare error.
+ *
+ * Extends `ConvexError`, not `Error`: a production Convex deployment replaces
+ * plain `Error` messages with "Server Error" before they reach the client, so
+ * a revoked tablet would otherwise explain nothing.
  */
-export class KioskTokenError extends Error {}
+export class KioskTokenError extends ConvexError<string> {}
 
 export async function hashKioskToken(token: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token))

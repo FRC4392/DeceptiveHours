@@ -31,6 +31,7 @@ import { formatDate, formatDateTime } from "@/lib/format"
 import { readKioskToken, writeKioskToken } from "@/lib/kiosk-token"
 import { Tablet, Trash2 } from "lucide-react"
 import { toast } from "sonner"
+import { errorMessage } from "@/lib/errors"
 
 export default function KiosksPage() {
   const devices = useQuery(api.kiosk.listDevices)
@@ -72,7 +73,7 @@ export default function KiosksPage() {
       await signOut({ redirectUrl: "/clock" })
       navigate("/clock", { replace: true })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to set up this kiosk")
+      toast.error(errorMessage(err, "Failed to set up this kiosk"))
       setRegistering(false)
     }
   }
@@ -85,7 +86,7 @@ export default function KiosksPage() {
       toast.success(`${revokeTarget.name} can no longer clock anyone in`)
       setRevokeTarget(null)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove kiosk")
+      toast.error(errorMessage(err, "Failed to remove kiosk"))
     } finally {
       setRevoking(false)
     }

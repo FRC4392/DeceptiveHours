@@ -1,6 +1,7 @@
 import type { Doc } from "./_generated/dataModel"
 import type { QueryCtx, MutationCtx } from "./_generated/server"
 import { resolveKioskDevice } from "./kioskAuth"
+import { ConvexError } from "convex/values"
 
 type Ctx = QueryCtx | MutationCtx
 
@@ -35,8 +36,8 @@ export async function getCurrentMember(ctx: Ctx): Promise<Doc<"teamMembers"> | n
  */
 export async function requireMentor(ctx: Ctx): Promise<Doc<"teamMembers">> {
   const member = await getCurrentMember(ctx)
-  if (!member) throw new Error("Unauthorized")
-  if (member.type !== "mentor") throw new Error("Forbidden: mentors only")
+  if (!member) throw new ConvexError("Unauthorized")
+  if (member.type !== "mentor") throw new ConvexError("Forbidden: mentors only")
   return member
 }
 

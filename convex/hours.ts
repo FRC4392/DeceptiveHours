@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel"
 import type { Doc } from "./_generated/dataModel"
 import { SESSION_SCAN_LIMIT } from "./limits"
 import { startOfTeamYear } from "./timeZone"
+import { ConvexError } from "convex/values"
 
 export interface HoursRange {
   startAt: number
@@ -20,12 +21,12 @@ export function defaultHoursRange(now = Date.now()): HoursRange {
 }
 
 export function validateHoursRange(range: HoursRange) {
-  if (!Number.isFinite(range.startAt)) throw new Error("Start date must be valid")
+  if (!Number.isFinite(range.startAt)) throw new ConvexError("Start date must be valid")
   if (range.endAt !== undefined && !Number.isFinite(range.endAt)) {
-    throw new Error("End date must be valid")
+    throw new ConvexError("End date must be valid")
   }
   if (range.endAt !== undefined && range.endAt <= range.startAt) {
-    throw new Error("End date must be after start date")
+    throw new ConvexError("End date must be after start date")
   }
 }
 
@@ -58,7 +59,7 @@ export async function openSessionFor(
       q.eq("teamMemberId", teamMemberId).eq("clockOut", undefined),
     )
     .take(2)
-  if (open.length > 1) throw new Error("Multiple open sessions found")
+  if (open.length > 1) throw new ConvexError("Multiple open sessions found")
   return open[0] ?? null
 }
 
@@ -110,7 +111,7 @@ export async function completedMsForRange(
     .take(SESSION_SCAN_LIMIT)
 
   if (sessions.length === SESSION_SCAN_LIMIT) {
-    throw new Error(
+    throw new ConvexError(
       `More than ${SESSION_SCAN_LIMIT} sessions in this range — narrow the reporting range`,
     )
   }

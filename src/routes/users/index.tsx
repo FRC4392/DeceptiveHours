@@ -41,6 +41,7 @@ import {
 } from "@/components/ui/table"
 import { Mail, RefreshCw, Trash2, UserPlus } from "lucide-react"
 import { toast } from "sonner"
+import { errorMessage } from "@/lib/errors"
 import { formatDate } from "@/lib/format"
 
 type Role = "student" | "mentor"
@@ -93,7 +94,7 @@ export default function UsersPage() {
       setInvitations(pending)
     } catch (err) {
       setInvitations(null)
-      toast.error(err instanceof Error ? err.message : "Failed to load invitations")
+      toast.error(errorMessage(err, "Failed to load invitations"))
     } finally {
       setLoadingInvitations(false)
     }
@@ -120,7 +121,7 @@ export default function UsersPage() {
       toast.success(`Invitation to ${email} revoked`)
       await refreshInvitations()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to revoke invitation")
+      toast.error(errorMessage(err, "Failed to revoke invitation"))
     } finally {
       setRevokingId(null)
     }
@@ -139,7 +140,7 @@ export default function UsersPage() {
       setRole("student")
       await refreshInvitations()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to send invitation")
+      toast.error(errorMessage(err, "Failed to send invitation"))
     } finally {
       setInviting(false)
     }
@@ -153,7 +154,7 @@ export default function UsersPage() {
       toast.success("User removed")
       setRemoveTarget(null)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove user")
+      toast.error(errorMessage(err, "Failed to remove user"))
     } finally {
       setRemoving(false)
     }
@@ -171,7 +172,7 @@ export default function UsersPage() {
       )
       if (result.removable > 0) setPruneCount(result.removable)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to sync Clerk users")
+      toast.error(errorMessage(err, "Failed to sync Clerk users"))
     } finally {
       setSyncing(false)
     }
@@ -186,7 +187,7 @@ export default function UsersPage() {
       )
       setPruneCount(null)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to remove stale records")
+      toast.error(errorMessage(err, "Failed to remove stale records"))
     } finally {
       setPruning(false)
     }

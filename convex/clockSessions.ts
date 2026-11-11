@@ -1,7 +1,7 @@
 import { mutation, query } from "./_generated/server"
 import type { QueryCtx, MutationCtx } from "./_generated/server"
 import type { Id } from "./_generated/dataModel"
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
 import { requireKioskOrMentor, requireMentor } from "./authz"
 import type { Caller } from "./authz"
 import {
@@ -26,20 +26,20 @@ const clockSessionDoc = v.object({
 const FUTURE_TOLERANCE_MS = 5 * 60_000
 
 function validateClockRange(clockIn: number, clockOut?: number) {
-  if (!Number.isFinite(clockIn)) throw new Error("Clock in must be a valid time")
+  if (!Number.isFinite(clockIn)) throw new ConvexError("Clock in must be a valid time")
   if (clockOut !== undefined && !Number.isFinite(clockOut)) {
-    throw new Error("Clock out must be a valid time")
+    throw new ConvexError("Clock out must be a valid time")
   }
   if (clockOut !== undefined && clockOut <= clockIn) {
-    throw new Error("Clock out must be after clock in")
+    throw new ConvexError("Clock out must be after clock in")
   }
   // A future clock-in makes the live timers count down from a negative elapsed
   // time, and a future open session blocks every later clock-in for that
   // member, so neither bound may be scheduled ahead of now.
   const latest = Date.now() + FUTURE_TOLERANCE_MS
-  if (clockIn > latest) throw new Error("Clock in cannot be in the future")
+  if (clockIn > latest) throw new ConvexError("Clock in cannot be in the future")
   if (clockOut !== undefined && clockOut > latest) {
-    throw new Error("Clock out cannot be in the future")
+    throw new ConvexError("Clock out cannot be in the future")
   }
 }
 
@@ -52,7 +52,7 @@ async function touchKiosk(ctx: MutationCtx, caller: Caller) {
 
 async function requireMember(ctx: QueryCtx | MutationCtx, id: Id<"teamMembers">) {
   const member = await ctx.db.get(id)
-  if (!member) throw new Error("Member not found")
+  if (!member) throw new ConvexError("Member not found")
   return member
 }
 
@@ -104,7 +104,7 @@ export const getForMember = query({
       .take(SESSION_SCAN_LIMIT)
 
     if (sessions.length === SESSION_SCAN_LIMIT) {
-      throw new Error(
+      throw new ConvexError(
         `More than ${SESSION_SCAN_LIMIT} sessions in this range — narrow the reporting range`,
       )
     }
@@ -128,7 +128,7 @@ async function assertNoOverlappingSession(
   // it is checked directly rather than left to the bounded walk below.
   const open = await openSessionFor(ctx, args.teamMemberId)
   if (open && open._id !== args.ignoreSessionId && open.clockIn < proposedEnd) {
-    throw new Error("Session overlaps an existing session")
+    throw new ConvexError("Session overlaps an existing session")
   }
 
   // Only sessions starting before the proposed end can overlap it. Walking
@@ -149,7 +149,7 @@ async function assertNoOverlappingSession(
     if (session._id === args.ignoreSessionId) continue
     if (session.clockOut === undefined) continue // open sessions handled above
     if (session.clockIn < proposedEnd && args.clockIn < session.clockOut) {
-      throw new Error("Session overlaps an existing session")
+      throw new ConvexError("Session overlaps an existing session")
     }
     if (session.clockIn <= args.clockIn) return
   }
@@ -165,7 +165,7 @@ export const clockIn = mutation({
     await touchKiosk(ctx, caller)
     await requireMember(ctx, teamMemberId)
     const existing = await openSessionFor(ctx, teamMemberId)
-    if (existing) throw new Error("Already clocked in")
+    if (existing) throw new ConvexError("Already clocked in")
     const clockIn = Date.now()
     await assertNoOverlappingSession(ctx, { teamMemberId, clockIn })
     return ctx.db.insert("clockSessions", { teamMemberId, clockIn, status: "open" })
@@ -181,7 +181,7 @@ export const clockOut = mutation({
     await touchKiosk(ctx, caller)
     await requireMember(ctx, teamMemberId)
     const session = await openSessionFor(ctx, teamMemberId)
-    if (!session) throw new Error("Not clocked in")
+    if (!session) throw new ConvexError("Not clocked in")
     await ctx.db.patch(session._id, { clockOut: Date.now(), status: "closed" })
     return null
   },
@@ -219,7 +219,7 @@ export const updateSession = mutation({
     await requireMentor(ctx)
     validateClockRange(clockIn, clockOut)
     const session = await ctx.db.get(id)
-    if (!session) throw new Error("Session not found")
+    if (!session) throw new ConvexError("Session not found")
     await assertNoOverlappingSession(ctx, {
       teamMemberId: session.teamMemberId,
       clockIn,

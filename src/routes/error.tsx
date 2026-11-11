@@ -1,4 +1,4 @@
-import { Link, isRouteErrorResponse, useRouteError } from "react-router"
+import { Link, isRouteErrorResponse, useParams, useRouteError } from "react-router"
 import { Button } from "@/components/ui/button"
 import { AlertTriangle, FileQuestion } from "lucide-react"
 
@@ -83,8 +83,17 @@ export function RouteErrorBoundary() {
  */
 export function MemberErrorBoundary() {
   const error = useRouteError()
+  const { memberDocId } = useParams<{ memberDocId: string }>()
+
+  // Decided from the URL rather than the error text, because production
+  // redacts server error messages. A well-formed ID that matches nobody is not
+  // an error at all — `getById` returns null and the page renders its own
+  // "Member not found" — so reaching here with a malformed id is the case
+  // worth naming.
+  const looksLikeConvexId = /^[a-z0-9]{16,}$/i.test(memberDocId ?? "")
   const message = error instanceof Error ? error.message : ""
   const isBadId =
+    !looksLikeConvexId ||
     message.includes("ArgumentValidationError") ||
     message.includes("Validator error") ||
     message.includes("not a valid document ID")

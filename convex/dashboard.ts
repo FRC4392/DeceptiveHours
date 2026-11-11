@@ -1,5 +1,5 @@
 import { query } from "./_generated/server"
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
 import { requireMentor } from "./authz"
 import { completedMsForRange, openSessionFor, resolveHoursRange } from "./hours"
 import { computeDisplayGrade, displayGradeValidator, studentGradeValidator } from "./studentInfo"
@@ -52,7 +52,7 @@ export const getDashboardData = query({
     const hoursRange = await resolveHoursRange(ctx, args)
     const members = await ctx.db.query("teamMembers").take(ROSTER_LIMIT)
     if (members.length === ROSTER_LIMIT) {
-      throw new Error(`Roster exceeds ${ROSTER_LIMIT} members — pagination is required`)
+      throw new ConvexError(`Roster exceeds ${ROSTER_LIMIT} members — pagination is required`)
     }
     const membersWithStats = await Promise.all(members.map(async (member) => {
       const [currentSession, completedMs] = await Promise.all([

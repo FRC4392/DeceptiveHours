@@ -1,5 +1,5 @@
 import { mutation, query } from "./_generated/server"
-import { v } from "convex/values"
+import { ConvexError, v } from "convex/values"
 import { requireMentor } from "./authz"
 import {
   KIOSK_TOKEN_TTL_MS,
@@ -36,7 +36,7 @@ export const registerDevice = mutation({
   handler: async (ctx, { name }) => {
     const mentor = await requireMentor(ctx)
     const trimmed = name.trim()
-    if (!trimmed) throw new Error("Give the kiosk a name so you can recognise it later")
+    if (!trimmed) throw new ConvexError("Give the kiosk a name so you can recognise it later")
 
     // Two UUIDs: ~244 bits of entropy, far beyond guessing.
     const token = `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", "")
@@ -79,7 +79,7 @@ export const revokeDevice = mutation({
   handler: async (ctx, { deviceId }) => {
     await requireMentor(ctx)
     const device = await ctx.db.get(deviceId)
-    if (!device) throw new Error("Kiosk not found")
+    if (!device) throw new ConvexError("Kiosk not found")
     await ctx.db.patch(deviceId, { revokedAt: Date.now() })
     return null
   },
@@ -105,7 +105,7 @@ export const verifyDevice = query({
       return { valid: true, name: device.name, reason: null }
     } catch (error) {
       if (error instanceof KioskTokenError) {
-        return { valid: false, name: null, reason: error.message }
+        return { valid: false, name: null, reason: error.data }
       }
       throw error
     }

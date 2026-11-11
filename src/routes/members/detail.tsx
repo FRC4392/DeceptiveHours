@@ -55,6 +55,7 @@ import {
 import { isStaleSession } from "@/lib/sessions"
 import { Spinner } from "@/components/spinner"
 import { toast } from "sonner"
+import { errorMessage } from "@/lib/errors"
 import {
   formatDate,
   formatDateTime,
@@ -197,7 +198,7 @@ export default function MemberDetailPage() {
       }
       setSessionDialogOpen(false)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to save session")
+      toast.error(errorMessage(e, "Failed to save session"))
     } finally {
       setSavingSession(false)
     }
@@ -211,7 +212,7 @@ export default function MemberDetailPage() {
       await clockOutMember({ teamMemberId: id })
       toast.success("Clocked out")
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to clock out")
+      toast.error(errorMessage(e, "Failed to clock out"))
     } finally {
       setClockingOut(false)
     }
@@ -222,7 +223,7 @@ export default function MemberDetailPage() {
       await deleteSession({ id: sid })
       toast.success("Session deleted")
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to delete session")
+      toast.error(errorMessage(e, "Failed to delete session"))
     } finally {
       setDeleteSessionId(null)
     }
@@ -286,7 +287,7 @@ export default function MemberDetailPage() {
       toast.success("Member updated")
       setEditMemberOpen(false)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to update member")
+      toast.error(errorMessage(e, "Failed to update member"))
     } finally {
       setSavingMember(false)
     }
