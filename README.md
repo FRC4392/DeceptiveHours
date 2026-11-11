@@ -187,9 +187,28 @@ Manual production deploys are still possible with:
 bunx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd "bun run build"
 ```
 
-Deploy previews currently run `bun run build` only, so they do not create Convex
-preview deployments unless Netlify and `netlify.toml` are changed to use Convex
-preview deploys.
+### Deploy previews
+
+Previews run `bun run build` only — deliberately, since running `convex deploy`
+from a pull request would push that branch's schema and functions to
+production. They therefore need their own backend, configured once in the
+Netlify UI as **deploy-preview scoped** variables:
+
+| Variable | Value | Scope |
+|---|---|---|
+| `VITE_CONVEX_URL` | the dev deployment's `.convex.cloud` URL | Deploy previews |
+| `VITE_CLERK_PUBLISHABLE_KEY` | the Clerk **development** instance's `pk_test_…` | Deploy previews |
+
+Point both at development, never production: a preview is a pull request that
+nobody has reviewed yet, and production holds real student hours. The dev
+Convex deployment's `CLERK_JWT_ISSUER_DOMAIN` must belong to the same Clerk
+development instance as the `pk_test_` key, or sign-in on a preview will fail.
+Clerk development instances accept arbitrary origins, so the random
+`deploy-preview-N--<site>.netlify.app` URLs work without an allowlist.
+
+If either variable is missing, the build still succeeds — they are read at
+build time — and the published preview shows a "This build is not configured"
+screen naming the missing variable, rather than a blank page.
 
 ### Migrations and backfills
 

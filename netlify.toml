@@ -8,6 +8,16 @@
   # `convex deploy` before Vite ever runs.
   NODE_VERSION = "22"
 
+# Previews build the frontend only — they must never run `convex deploy`, which
+# would push a pull request's schema and functions to production. They instead
+# point at the dev Convex deployment and the Clerk development instance, set as
+# deploy-preview-scoped variables in the Netlify UI:
+#
+#   VITE_CONVEX_URL            https://<dev>.convex.cloud
+#   VITE_CLERK_PUBLISHABLE_KEY pk_test_...
+#
+# Without those two, the build still succeeds and the published preview shows
+# the "not configured" screen from src/main.tsx.
 [context.deploy-preview]
   command = "bun run build"
 
